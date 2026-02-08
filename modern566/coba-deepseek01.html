@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSL Layout Parser</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            background-color: #4a6fa5;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .panel-content {
+            padding: 20px;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        button {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            margin-top: 10px;
+            width: 100%;
+        }
+        
+        button:hover {
+            background-color: #3a5a8a;
+        }
+        
+        #output {
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .example {
+            background-color: #f0f7ff;
+            border-left: 4px solid #4a6fa5;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .example h4 {
+            margin-top: 0;
+            color: #4a6fa5;
+        }
+        
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #66bb6a;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #388e3c;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .visualization {
+            padding: 15px;
+            border: 1px dashed #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+            background-color: #fafafa;
+        }
+        
+        .node {
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #e8f4fc;
+        }
+        
+        .node-type {
+            font-weight: bold;
+            color: #1976d2;
+        }
+        
+        .node-name {
+            color: #388e3c;
+            font-style: italic;
+        }
+        
+        .node-props {
+            margin-left: 20px;
+            color: #7b1fa2;
+        }
+        
+        .prop-key {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">
+                DSL Layout Input
+            </div>
+            <div class="panel-content">
+                <div class="instructions">
+                    <h3>DSL Format Rules:</h3>
+                    <ul>
+                        <li>Indentation-based structure (gunakan spasi atau tab)</li>
+                        <li>Elemen didefinisikan dengan: <code>type name props?</code></li>
+                        <li>Tiga dash (<code>---</code>) menandai akhir dari props</li>
+                        <li>Baris setelah <code>---</code> adalah children (harus lebih indent)</li>
+                        <li>Format props: <code>key: value</code> atau <code>key value</code></li>
+                        <li>Array values: <code>at 0 0</code> menjadi <code>"at": [0, 0]</code></li>
+                    </ul>
+                </div>
+                
+                <div class="example">
+                    <h4>Contoh DSL Layout:</h4>
+                    <pre>@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()</pre>
+                </div>
+                
+                <textarea id="dslInput">@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()</textarea>
+                
+                <button id="parseBtn">Parse DSL to JSON</button>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">
+                JSON Output
+            </div>
+            <div class="panel-content">
+                <div id="output"></div>
+                
+                <div class="visualization">
+                    <h4>Struktur Visual:</h4>
+                    <div id="visualization"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DSLParser {
+            constructor() {
+                this.lines = [];
+                this.currentLine = 0;
+                this.rootNode = null;
+            }
+            
+            parse(dslText) {
+                // Reset state
+                this.lines = dslText.split('\n');
+                this.currentLine = 0;
+                this.rootNode = null;
+                
+                // Parse lines
+                const result = this.parseNode(0, null);
+                
+                // Create file node wrapper if needed
+                if (result && result.type !== 'file') {
+                    this.rootNode = {
+                        type: 'file',
+                        name: 'player-normal',
+                        children: result ? [result] : []
+                    };
+                } else {
+                    this.rootNode = result;
+                }
+                
+                return this.rootNode;
+            }
+            
+            parseNode(indentLevel, parentType) {
+                if (this.currentLine >= this.lines.length) return null;
+                
+                const line = this.lines[this.currentLine];
+                const lineIndent = this.getIndentLevel(line);
+                
+                // If indent is less than expected, return to parent
+                if (lineIndent < indentLevel) {
+                    return null;
+                }
+                
+                // Skip empty lines
+                if (line.trim() === '') {
+                    this.currentLine++;
+                    return this.parseNode(indentLevel, parentType);
+                }
+                
+                // Parse current line
+                const parsedLine = this.parseLine(line.trim());
+                
+                const node = {
+                    type: parsedLine.type,
+                    name: parsedLine.name,
+                    props: {},
+                    children: []
+                };
+                
+                this.currentLine++;
+                
+                // Parse props until we hit children or triple dash
+                let inProps = true;
+                let hasTripleDash = false;
+                
+                while (this.currentLine < this.lines.length && inProps) {
+                    const nextLine = this.lines[this.currentLine];
+                    const nextIndent = this.getIndentLevel(nextLine);
+                    
+                    // Check if we're still at the same indent level
+                    if (nextIndent <= lineIndent) {
+                        break;
+                    }
+                    
+                    // Check if this is a child (more indented than our props)
+                    if (nextIndent > lineIndent + 1) {
+                        break;
+                    }
+                    
+                    const trimmedNext = nextLine.trim();
+                    
+                    // Check for triple dash
+                    if (trimmedNext === '---') {
+                        hasTripleDash = true;
+                        this.currentLine++;
+                        continue;
+                    }
+                    
+                    // If we've seen triple dash, then these are children
+                    if (hasTripleDash) {
+                        // Children might have different indent levels, so we need to handle them
+                        // Reset currentLine to process children
+                        this.currentLine--;
+                        inProps = false;
+                        break;
+                    }
+                    
+                    // Parse as prop
+                    const prop = this.parseProp(trimmedNext);
+                    if (prop) {
+                        // Handle special cases for at and size props
+                        if (prop.key === 'at' || prop.key === 'size') {
+                            // Parse as array of numbers
+                            const values = prop.value.split(' ').map(v => {
+                                const num = parseFloat(v);
+                                return isNaN(num) ? v : num;
+                            });
+                            node.props[prop.key] = values;
+                        } else {
+                            node.props[prop.key] = prop.value;
+                        }
+                    }
+                    
+                    this.currentLine++;
+                }
+                
+                // Parse children
+                if (hasTripleDash || !inProps) {
+                    while (this.currentLine < this.lines.length) {
+                        const childLine = this.lines[this.currentLine];
+                        const childIndent = this.getIndentLevel(childLine);
+                        
+                        // If indent is not greater than current node, break
+                        if (childIndent <= lineIndent) {
+                            break;
+                        }
+                        
+                        // Parse child node
+                        const child = this.parseNode(lineIndent + 1, node.type);
+                        if (child) {
+                            node.children.push(child);
+                        }
+                    }
+                }
+                
+                return node;
+            }
+            
+            parseLine(line) {
+                // Handle special @layout directive
+                if (line.startsWith('@')) {
+                    return {
+                        type: line.substring(1),
+                        name: null
+                    };
+                }
+                
+                // Parse line in format: "name: type props..." or "type props..."
+                let name = null;
+                let type = '';
+                let rest = '';
+                
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    name = parts[0].trim();
+                    const afterColon = parts.slice(1).join(':').trim();
+                    
+                    // Extract type (first word after colon)
+                    const afterColonParts = afterColon.split(/\s+/);
+                    type = afterColonParts[0];
+                    rest = afterColonParts.slice(1).join(' ');
+                } else {
+                    // No name, just type and props
+                    const parts = line.split(/\s+/);
+                    type = parts[0];
+                    rest = parts.slice(1).join(' ');
+                }
+                
+                // If we have props in the line, parse them
+                if (rest.trim()) {
+                    // This will be handled in parseProp
+                }
+                
+                return { type, name };
+            }
+            
+            parseProp(line) {
+                // Parse prop in format: "key: value" or "key value"
+                const colonIndex = line.indexOf(':');
+                
+                if (colonIndex !== -1) {
+                    // Format: "key: value"
+                    const key = line.substring(0, colonIndex).trim();
+                    let value = line.substring(colonIndex + 1).trim();
+                    
+                    // Try to parse value as number if possible
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && value === numValue.toString()) {
+                        value = numValue;
+                    }
+                    
+                    return { key, value };
+                } else {
+                    // Format: "key value" or just "key"
+                    const parts = line.split(/\s+/);
+                    if (parts.length >= 2) {
+                        const key = parts[0];
+                        const value = parts.slice(1).join(' ');
+                        
+                        // Try to parse as number
+                        const numValue = parseFloat(value);
+                        if (!isNaN(numValue) && value === numValue.toString()) {
+                            return { key, value: numValue };
+                        }
+                        
+                        return { key, value };
+                    } else if (parts.length === 1) {
+                        // Boolean prop (key with no value)
+                        return { key: parts[0], value: true };
+                    }
+                }
+                
+                return null;
+            }
+            
+            getIndentLevel(line) {
+                // Count leading spaces (4 spaces per indent level)
+                let spaces = 0;
+                for (let i = 0; i < line.length; i++) {
+                    if (line[i] === ' ') {
+                        spaces++;
+                    } else if (line[i] === '\t') {
+                        spaces += 4; // Treat tab as 4 spaces
+                    } else {
+                        break;
+                    }
+                }
+                
+                return Math.floor(spaces / 4);
+            }
+        }
+        
+        // DOM elements
+        const dslInput = document.getElementById('dslInput');
+        const parseBtn = document.getElementById('parseBtn');
+        const output = document.getElementById('output');
+        const visualization = document.getElementById('visualization');
+        
+        // Parse button click handler
+        parseBtn.addEventListener('click', () => {
+            const parser = new DSLParser();
+            const result = parser.parse(dslInput.value);
+            debugger
+            
+            // Display JSON output
+            output.textContent = JSON.stringify(result, null, 2);
+            
+            // Display visualization
+            // displayVisualization(result);
+        });
+        
+        // Display visualization of the parsed structure
+        function displayVisualization(node, indent = 0) {
+            visualization.innerHTML = '';
+            
+            function createNodeElement(node, depth = 0) {
+                const div = document.createElement('div');
+                div.className = 'node';
+                div.style.marginLeft = `${depth * 20}px`;
+                
+                let html = `<span class="node-type">${node.type}</span>`;
+                
+                if (node.name) {
+                    html += ` <span class="node-name">"${node.name}"</span>`;
+                }
+                
+                // Display props
+                if (Object.keys(node.props || {}).length > 0) {
+                    html += '<div class="node-props">';
+                    for (const [key, value] of Object.entries(node.props)) {
+                        html += `<div><span class="prop-key">${key}:</span> ${JSON.stringify(value)}</div>`;
+                    }
+                    html += '</div>';
+                }
+                
+                div.innerHTML = html;
+                
+                // Add children
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => {
+                        div.appendChild(createNodeElement(child, depth + 1));
+                    });
+                }
+                
+                return div;
+            }
+            
+            if (node) {
+                visualization.appendChild(createNodeElement(node));
+            }
+        }
+        
+        // Parse initial example on load
+        window.addEventListener('DOMContentLoaded', () => {
+            parseBtn.click();
+        });
+        
+        // Add more examples for testing
+        const examples = [
+            {
+                name: "Complex Example",
+                dsl: `@layout
+main
+    title "Player Interface"
+    width 800
+    height 600
+    ---
+    Header: panel at 0 0 size 800 50
+        title: label at 10 10 text "Media Player"
+        closeBtn: button at 750 10 size 30 30
+            =CLOSE()
+    
+    Content: panel at 0 50 size 800 500
+        video: component at 100 50 size 600 400
+        controls: panel at 100 470 size 600 50
+            play: button at 0 0 text "Play"
+            pause: button at 100 0 text "Pause"
+            stop: button at 200 0 text "Stop"`
+            },
+            {
+                name: "Simple Example",
+                dsl: `@layout
+window
+    at 100 100
+    size 400 300
+    ---
+    btn1: button at 10 10 text "OK"
+    btn2: button at 100 10 text "Cancel"`
+            }
+        ];
+        
+        // Add example selector
+        const exampleSelect = document.createElement('select');
+        exampleSelect.innerHTML = `
+            <option value="">Select an example...</option>
+            <option value="0">Complex Example</option>
+            <option value="1">Simple Example</option>
+            <option value="custom">Custom (from textarea)</option>
+        `;
+        
+        exampleSelect.style.marginBottom = '10px';
+        exampleSelect.style.padding = '8px';
+        exampleSelect.style.width = '100%';
+        exampleSelect.style.borderRadius = '4px';
+        exampleSelect.style.border = '1px solid #ddd';
+        
+        exampleSelect.addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value === 'custom') {
+                return;
+            }
+            
+            if (value !== '') {
+                const example = examples[parseInt(value)];
+                dslInput.value = example.dsl;
+                parseBtn.click();
+            }
+        });
+        
+        // Insert example selector before textarea
+        dslInput.parentNode.insertBefore(exampleSelect, dslInput);
+        
+        // Add label for selector
+        const label = document.createElement('div');
+        label.textContent = 'Examples:';
+        label.style.marginBottom = '5px';
+        label.style.fontWeight = 'bold';
+        dslInput.parentNode.insertBefore(label, exampleSelect);
+    </script>
+</body>
+</html>

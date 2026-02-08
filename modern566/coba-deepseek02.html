@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSL Layout Parser with Ohm.js</title>
+    <script src="https://unpkg.com/ohm-js@17/dist/ohm.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            background: linear-gradient(135deg, #4a6fa5 0%, #3a5a8a 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.2em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-content {
+            padding: 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 2px solid #e1e5eb;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #4a6fa5;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #4a6fa5 0%, #3a5a8a 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 10px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(74, 111, 165, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        #output {
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background-color: #f8fafc;
+            border: 2px solid #e1e5eb;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+        
+        .example {
+            background: linear-gradient(135deg, #f0f7ff 0%, #e8f1ff 100%);
+            border-left: 4px solid #4a6fa5;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 0 6px 6px 0;
+        }
+        
+        .example h4 {
+            margin-top: 0;
+            color: #4a6fa5;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .instructions {
+            background: linear-gradient(135deg, #f9fff0 0%, #f0ffe8 100%);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #66bb6a;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #388e3c;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .instructions code {
+            background-color: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        .visualization {
+            padding: 15px;
+            border: 2px dashed #e1e5eb;
+            border-radius: 6px;
+            margin-top: 20px;
+            background-color: #fafcff;
+        }
+        
+        .node {
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #e8f4fc 0%, #e0ecf7 100%);
+            border: 1px solid #d1e3f8;
+        }
+        
+        .node-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .node-type {
+            font-weight: bold;
+            color: #1976d2;
+            background-color: rgba(25, 118, 210, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .node-name {
+            color: #388e3c;
+            font-style: italic;
+            background-color: rgba(56, 142, 60, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .node-props {
+            margin-left: 20px;
+            padding-left: 15px;
+            border-left: 2px solid #bbdefb;
+        }
+        
+        .prop-item {
+            margin: 6px 0;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        
+        .prop-key {
+            font-weight: bold;
+            color: #7b1fa2;
+            min-width: 80px;
+        }
+        
+        .prop-value {
+            color: #333;
+            font-family: monospace;
+            background-color: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        .children-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #d1e3f8;
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ddd;
+        }
+        
+        .status-indicator.success {
+            background-color: #4caf50;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+        }
+        
+        .status-indicator.error {
+            background-color: #f44336;
+            box-shadow: 0 0 8px rgba(244, 67, 54, 0.5);
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e5eb;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            border-bottom-color: #4a6fa5;
+            color: #4a6fa5;
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .grammar-view {
+            background-color: #f8fafc;
+            border: 1px solid #e1e5eb;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .grammar-keyword {
+            color: #7b1fa2;
+            font-weight: bold;
+        }
+        
+        .grammar-rule {
+            color: #1976d2;
+            font-weight: bold;
+        }
+        
+        .grammar-comment {
+            color: #757575;
+            font-style: italic;
+        }
+        
+        .error-message {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 12px 15px;
+            margin-top: 10px;
+            border-radius: 0 4px 4px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .controls button {
+            flex: 1;
+        }
+        
+        .icon {
+            font-size: 1.2em;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .logo span {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        #output {
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">
+                <span>DSL Layout Input (Ohm.js Parser)</span>
+                <div class="logo">
+                    Powered by <span>Ohm.js</span>
+                </div>
+            </div>
+            <div class="panel-content">
+
+                <textarea id="dslInput">@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()</textarea>
+            
+                
+                <div class="example">
+                    <h4>📝 Contoh DSL Layout:</h4>
+                    <pre>@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()</pre>
+                </div>
+                
+                <div class="controls">
+                    <button id="parseBtn">
+                        <span class="icon">⚡</span>
+                        Parse DSL to JSON
+                    </button>
+                    <button id="testBtn">
+                        <span class="icon">🧪</span>
+                        Test Complex Example
+                    </button>
+                </div>
+                
+                <div class="status-bar" id="statusBar">
+                    <div class="status-indicator" id="statusIndicator"></div>
+                    <span id="statusText">Ready to parse</span>
+                </div>
+                
+                <div id="errorContainer"></div>
+                    
+                <div class="instructions">
+                    <h3>📋 DSL Format Specification</h3>
+                    <ul>
+                        <li><strong>Indentation-based</strong>: Use spaces for nesting (recommended: 4 spaces per level)</li>
+                        <li><strong>Element syntax</strong>: <code>type</code>, <code>name: type</code>, or <code>name: type props...</code></li>
+                        <li><strong>Triple dash (---)</strong>: Marks end of props section</li>
+                        <li><strong>Children</strong>: Lines after <code>---</code> with greater indentation</li>
+                        <li><strong>Props format</strong>: <code>key: value</code> or <code>key value1 value2...</code></li>
+                        <li><strong>Special arrays</strong>: <code>at 0 0</code> → <code>"at": [0, 0]</code></li>
+                        <li><strong>Directives</strong>: Start with <code>@</code> (e.g., <code>@layout</code>)</li>
+                    </ul>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">
+                Output & Visualization
+            </div>
+            <div class="panel-content">
+                <div class="tabs">
+                    <div class="tab active" data-tab="json">JSON Output</div>
+                    <div class="tab" data-tab="visualization">Tree Visualization</div>
+                    <div class="tab" data-tab="grammar">Grammar Definition</div>
+                </div>
+                
+                <div class="tab-content active" id="jsonTab">
+                    <div id="output"></div>
+                </div>
+                
+                <div class="tab-content" id="visualizationTab">
+                    <div class="visualization">
+                        <h4>🌳 Struktur Visual:</h4>
+                        <div id="visualization"></div>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="grammarTab">
+                    <div class="grammar-view" id="grammarView"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Ohm.js Grammar Definition
+        const dslGrammar = ohm.grammar(String.raw`
+            DSL {
+                // Main entry point
+                Layout = Directive? Element+
+                
+                // Directive starts with @
+                Directive = "@" ident
+                
+                // Elements can have names or be anonymous
+                Element = NamedElement | AnonymousElement
+                
+                NamedElement = ident ":" Type Prop* Dash? Element*
+                AnonymousElement = Type Prop* Dash? Element*
+                
+                // Type identifier
+                Type = ident
+                
+                // Properties
+                Prop = PropKv | PropSimple
+                PropKv = ident ":" Value
+                PropSimple = ident Value+
+                
+                // Values
+                Value = number | string | ident
+                
+                // Triple dash separator
+                Dash = "---"
+                
+                // Lexical rules
+                ident = letter (letter | digit | "-" | "_")*
+                number = ("-" | "+")? digit+ ("." digit+)?
+                string = "\"" (~"\"" any)* "\""
+                
+                // Whitespace and indentation handled by semantics
+            }
+        `);
+
+        // Semantics for the grammar
+        const dslSemantics = dslGrammar.createSemantics().addOperation('toAST', {
+            Layout(directive, elements) {
+                const directiveValue = directive.toAST();
+                const elementList = elements.toAST();
+                
+                // If we have a directive, it becomes the first element
+                const children = directiveValue ? [directiveValue, ...elementList] : elementList;
+                
+                return {
+                    type: 'file',
+                    name: 'player-normal',
+                    children: children
+                };
+            },
+            
+            Directive(_, name) {
+                return {
+                    type: name.sourceString,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+            },
+            
+            NamedElement(name, _, type, props, dash, children) {
+                const propsObj = _processProps(props.toAST());
+                const childrenList = children.toAST();
+                
+                return {
+                    type: type.sourceString,
+                    name: name.sourceString,
+                    props: propsObj,
+                    children: dash.sourceString ? _processChildren(childrenList) : []
+                };
+            },
+            
+            AnonymousElement(type, props, dash, children) {
+                const propsObj = _processProps(props.toAST());
+                const childrenList = children.toAST();
+                
+                return {
+                    type: type.sourceString,
+                    name: null,
+                    props: propsObj,
+                    children: dash.sourceString ? _processChildren(childrenList) : []
+                };
+            },
+            
+            Type(name) {
+                return name.sourceString;
+            },
+            
+            PropKv(key, _, value) {
+                return { key: key.sourceString, value: value.toAST() };
+            },
+            
+            PropSimple(key, values) {
+                const valueList = values.toAST();
+                return { 
+                    key: key.sourceString, 
+                    value: valueList.length === 1 ? valueList[0] : valueList 
+                };
+            },
+            
+            Value(val) {
+                return val.toAST();
+            },
+            
+            ident(first, rest) {
+                return first.sourceString;
+            },
+            
+            number(sign, integer, dot, fraction) {
+                const signStr = sign.sourceString || '';
+                const integerStr = integer.sourceString;
+                const fractionStr = fraction.sourceString || '';
+                return parseFloat(signStr + integerStr + (fractionStr ? '.' + fractionStr : ''));
+            },
+            
+            string(quote1, chars, quote2) {
+                return chars.sourceString;
+                // return s.sourceString.slice(1, -1); // Remove quotes
+            },
+            
+              _iter(...children) {
+                    // return children.map(c => c.raw());
+                    return children;
+                },
+        });
+
+
+            // Helper methods
+            function _processProps(propsArray) {
+                const result = {};
+                propsArray.forEach(prop => {
+                    if (prop.key === 'at' || prop.key === 'size') {
+                        // Ensure these are arrays
+                        result[prop.key] = Array.isArray(prop.value) ? prop.value : [prop.value];
+                    } else {
+                        result[prop.key] = prop.value;
+                    }
+                });
+                return result;
+            }
+            
+            function _processChildren(childrenArray) {
+                // Filter out empty children and handle indentation
+                return childrenArray.filter(child => child !== null);
+            }
+
+        // Parser class with Ohm.js
+        class DSLParserOhm {
+            constructor() {
+                this.grammar = dslGrammar;
+                this.semantics = dslSemantics;
+            }
+            
+            parse(dslText) {
+                try {
+                    // Preprocess: Handle indentation by adding it to the grammar matching
+                    const lines = dslText.split('\n');
+                    const processedLines = this._preprocessLines(lines);
+                    
+                    // Join back and parse
+                    const input = processedLines.join('\n');
+                    const match = this.grammar.match(input);
+                    
+                    if (match.failed()) {
+                        throw new Error(`Parse failed: ${match.message}`);
+                    }
+                    
+                    // Convert to AST
+                    const ast = this.semantics(match).toAST();
+                    
+                    // Post-process: Handle indentation-based hierarchy
+                    return this._buildHierarchy(ast, lines);
+                    
+                } catch (error) {
+                    console.error('Parse error:', error);
+                    throw error;
+                }
+            }
+            
+            _preprocessLines(lines) {
+                // Convert indentation to a format Ohm can understand
+                return lines.map(line => {
+                    if (line.trim() === '') return '';
+                    
+                    // Count indentation level
+                    const indent = line.match(/^\s*/)[0].length;
+                    const content = line.trim();
+                    
+                    // Mark indentation level for post-processing
+                    return `${'  '.repeat(Math.floor(indent / 2))}${content}`;
+                });
+            }
+            
+            _buildHierarchy(ast, originalLines) {
+                // This is a simplified hierarchy builder
+                // In a full implementation, we would parse indentation more carefully
+                
+                // For now, return the AST as-is and rely on post-processing
+                return ast;
+            }
+            
+            // Alternative parsing method that handles indentation better
+            parseWithIndentation(dslText) {
+                const lines = dslText.split('\n');
+                const root = {
+                    type: 'file',
+                    name: 'player-normal',
+                    children: []
+                };
+                
+                let stack = [{ node: root, indent: -1 }];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    
+                    const indent = line.match(/^\s*/)[0].length;
+                    const content = line.trim();
+                    
+                    // Parse the line using Ohm for the content
+                    const element = this._parseLineContent(content);
+                    
+                    // Find the right parent based on indentation
+                    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+                        stack.pop();
+                    }
+                    
+                    const parent = stack[stack.length - 1].node;
+                    
+                    if (element) {
+                        parent.children.push(element);
+                        stack.push({ node: element, indent });
+                    }
+                }
+                
+                return root;
+            }
+            
+            _parseLineContent(line) {
+                try {
+                    // Try to parse as a named element
+                    const namedMatch = this.grammar.match(line, 'NamedElement');
+                    if (!namedMatch.failed()) {
+                        return this.semantics(namedMatch).toAST();
+                    }
+                    
+                    // Try to parse as an anonymous element
+                    const anonMatch = this.grammar.match(line, 'AnonymousElement');
+                    if (!anonMatch.failed()) {
+                        return this.semantics(anonMatch).toAST();
+                    }
+                    
+                    // Try to parse as a directive
+                    if (line.startsWith('@')) {
+                        const dirMatch = this.grammar.match(line, 'Directive');
+                        if (!dirMatch.failed()) {
+                            return this.semantics(dirMatch).toAST();
+                        }
+                    }
+                    
+                    return null;
+                } catch (e) {
+                    console.warn(`Failed to parse line: ${line}`, e);
+                    return null;
+                }
+            }
+        }
+
+        // DOM elements
+        const dslInput = document.getElementById('dslInput');
+        const parseBtn = document.getElementById('parseBtn');
+        const testBtn = document.getElementById('testBtn');
+        const output = document.getElementById('output');
+        const visualization = document.getElementById('visualization');
+        const grammarView = document.getElementById('grammarView');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const errorContainer = document.getElementById('errorContainer');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        // Initialize parser
+        const parser = new DSLParserOhm();
+
+        // Display grammar
+        grammarView.innerHTML = `<span class="grammar-keyword">DSL</span> {
+  <span class="grammar-comment">// Main entry point</span>
+  <span class="grammar-rule">Layout</span> = <span class="grammar-rule">Directive</span>? <span class="grammar-rule">Element</span>+
+  
+  <span class="grammar-comment">// Directive starts with @</span>
+  <span class="grammar-rule">Directive</span> = "@" <span class="grammar-rule">ident</span>
+  
+  <span class="grammar-comment">// Elements can have names or be anonymous</span>
+  <span class="grammar-rule">Element</span> = <span class="grammar-rule">NamedElement</span> | <span class="grammar-rule">AnonymousElement</span>
+  
+  <span class="grammar-rule">NamedElement</span> = <span class="grammar-rule">ident</span> ":" <span class="grammar-rule">Type</span> <span class="grammar-rule">Prop</span>* <span class="grammar-rule">Dash</span>? <span class="grammar-rule">Element</span>*
+  <span class="grammar-rule">AnonymousElement</span> = <span class="grammar-rule">Type</span> <span class="grammar-rule">Prop</span>* <span class="grammar-rule">Dash</span>? <span class="grammar-rule">Element</span>*
+  
+  <span class="grammar-comment">// Type identifier</span>
+  <span class="grammar-rule">Type</span> = <span class="grammar-rule">ident</span>
+  
+  <span class="grammar-comment">// Properties</span>
+  <span class="grammar-rule">Prop</span> = <span class="grammar-rule">PropKv</span> | <span class="grammar-rule">PropSimple</span>
+  <span class="grammar-rule">PropKv</span> = <span class="grammar-rule">ident</span> ":" <span class="grammar-rule">Value</span>
+  <span class="grammar-rule">PropSimple</span> = <span class="grammar-rule">ident</span> <span class="grammar-rule">Value</span>+
+  
+  <span class="grammar-comment">// Values</span>
+  <span class="grammar-rule">Value</span> = <span class="grammar-rule">number</span> | <span class="grammar-rule">string</span> | <span class="grammar-rule">ident</span>
+  
+  <span class="grammar-comment">// Triple dash separator</span>
+  <span class="grammar-rule">Dash</span> = "---"
+  
+  <span class="grammar-comment">// Lexical rules</span>
+  <span class="grammar-rule">ident</span> = <span class="grammar-rule">letter</span> (<span class="grammar-rule">letter</span> | <span class="grammar-rule">digit</span> | "-" | "_")*
+  <span class="grammar-rule">number</span> = ("-" | "+")? <span class="grammar-rule">digit</span>+ ("." <span class="grammar-rule">digit</span>+)?
+  <span class="grammar-rule">string</span> = "\\"" (~"\\"" <span class="grammar-rule">any</span>)* "\\""
+}</pre>`;
+
+        // Update status
+        function updateStatus(type, message) {
+            statusIndicator.className = 'status-indicator ' + type;
+            statusText.textContent = message;
+            
+            if (type === 'error') {
+                statusText.style.color = '#f44336';
+            } else if (type === 'success') {
+                statusText.style.color = '#4caf50';
+            } else {
+                statusText.style.color = '#666';
+            }
+        }
+
+        // Clear errors
+        function clearErrors() {
+            errorContainer.innerHTML = '';
+        }
+
+        // Show error
+        function showError(message) {
+            errorContainer.innerHTML = `
+                <div class="error-message">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        // Parse button click handler
+        parseBtn.addEventListener('click', () => {
+            clearErrors();
+            
+            try {
+                updateStatus('', 'Parsing...');
+                
+                // Use the indentation-aware parser
+                const result = parser.parseWithIndentation(dslInput.value);
+                
+                // Display JSON output
+                output.textContent = JSON.stringify(result, null, 2);
+                
+                // Display visualization
+                // displayVisualization(result);
+                
+                updateStatus('success', 'Parsing successful!');
+                
+            } catch (error) {
+                console.error('Parse error:', error);
+                showError(error.message);
+                updateStatus('error', 'Parsing failed');
+            }
+        });
+
+        // Test button click handler
+        testBtn.addEventListener('click', () => {
+            const testDSL = `@layout
+window
+    title "Advanced Player"
+    at 100 100
+    size 800 600
+    ---
+    Header: panel at 0 0 size 800 60
+        title: label at 20 20 text "Media Player v2.0"
+        icon: image at 750 15 size 30 30 src "icon.png"
+    
+    Content: container at 0 60 size 800 490
+        video: player at 100 50 size 600 360
+        controls: panel at 100 420 size 600 50
+            play: button at 0 0 size 80 30 text "Play"
+            pause: button at 90 0 size 80 30 text "Pause"
+            stop: button at 180 0 size 80 30 text "Stop"
+            volume: slider at 270 0 size 150 30 min 0 max 100 value 80
+    
+    Footer: panel at 0 550 size 800 50
+        Minimize: button at 700 10 size 40 30
+            =CLOSE()
+        Maximize: button at 750 10 size 40 30
+            =MAXIMIZE()`;
+            
+            dslInput.value = testDSL;
+            parseBtn.click();
+        });
+
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.getAttribute('data-tab');
+                
+                // Update active tab
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabId}Tab`) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+
+        // Display visualization of the parsed structure
+        function displayVisualization(node, depth = 0) {
+            visualization.innerHTML = '';
+            
+            function createNodeElement(node, depth = 0) {
+                const div = document.createElement('div');
+                div.className = 'node';
+                div.style.marginLeft = `${depth * 20}px`;
+                
+                // Node header
+                const header = document.createElement('div');
+                header.className = 'node-header';
+                
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'node-type';
+                typeSpan.textContent = node.type;
+                
+                header.appendChild(typeSpan);
+                
+                if (node.name) {
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'node-name';
+                    nameSpan.textContent = `"${node.name}"`;
+                    header.appendChild(nameSpan);
+                }
+                
+                div.appendChild(header);
+                
+                // Display props
+                if (Object.keys(node.props).length > 0) {
+                    const propsDiv = document.createElement('div');
+                    propsDiv.className = 'node-props';
+                    
+                    for (const [key, value] of Object.entries(node.props)) {
+                        const propDiv = document.createElement('div');
+                        propDiv.className = 'prop-item';
+                        
+                        const keySpan = document.createElement('span');
+                        keySpan.className = 'prop-key';
+                        keySpan.textContent = `${key}:`;
+                        
+                        const valueSpan = document.createElement('span');
+                        valueSpan.className = 'prop-value';
+                        valueSpan.textContent = JSON.stringify(value);
+                        
+                        propDiv.appendChild(keySpan);
+                        propDiv.appendChild(valueSpan);
+                        propsDiv.appendChild(propDiv);
+                    }
+                    
+                    div.appendChild(propsDiv);
+                }
+                
+                // Add children
+                if (node.children && node.children.length > 0) {
+                    const childrenDiv = document.createElement('div');
+                    childrenDiv.className = 'children-section';
+                    
+                    node.children.forEach(child => {
+                        childrenDiv.appendChild(createNodeElement(child, depth + 1));
+                    });
+                    
+                    div.appendChild(childrenDiv);
+                }
+                
+                return div;
+            }
+            
+            if (node) {
+                visualization.appendChild(createNodeElement(node));
+            }
+        }
+
+        // Parse initial example on load
+        window.addEventListener('DOMContentLoaded', () => {
+            updateStatus('', 'Ready to parse');
+            parseBtn.click();
+            
+            // Add keyboard shortcut (Ctrl+Enter to parse)
+            dslInput.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    parseBtn.click();
+                }
+            });
+        });
+
+        // Add more examples dropdown
+        const examples = [
+            {
+                name: "Basic Example",
+                dsl: `@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()`
+            },
+            {
+                name: "Complex UI",
+                dsl: `@layout
+application
+    title "Music Player"
+    width 900
+    height 700
+    ---
+    Sidebar: panel at 0 0 size 200 700
+        Library: list at 10 10 size 180 300
+        Playlists: tree at 10 320 size 180 300
+    
+    Main: panel at 200 0 size 700 700
+        Player: component at 50 50 size 600 400
+        Controls: panel at 50 470 size 600 100
+            Prev: button at 0 20 size 60 40 icon "prev"
+            Play: button at 70 20 size 80 40 icon "play"
+            Next: button at 160 20 size 60 40 icon "next"
+            Progress: slider at 230 30 size 300 20`
+            },
+            {
+                name: "Nested Components",
+                dsl: `@layout
+container
+    padding 10
+    ---
+    Widget: group at 10 10
+        title "Settings"
+        ---
+        Toggle: switch at 20 20
+            label "Dark Mode"
+            value true
+        
+        Slider: control at 20 60
+            label "Volume"
+            min 0
+            max 100
+            value 75
+        
+        Save: button at 20 120
+            text "Apply"
+            action =SAVE()`
+            }
+        ];
+        
+        // Create example selector
+        const exampleSelect = document.createElement('select');
+        exampleSelect.innerHTML = `
+            <option value="">📚 Pilih contoh...</option>
+            ${examples.map((ex, i) => `<option value="${i}">${ex.name}</option>`).join('')}
+        `;
+        
+        exampleSelect.style.cssText = `
+            margin-bottom: 10px;
+            padding: 10px;
+            width: 100%;
+            border-radius: 6px;
+            border: 2px solid #e1e5eb;
+            font-family: inherit;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        `;
+        
+        exampleSelect.addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value !== '') {
+                const example = examples[parseInt(value)];
+                dslInput.value = example.dsl;
+                parseBtn.click();
+                exampleSelect.value = '';
+            }
+        });
+        
+        // Insert example selector before textarea
+        dslInput.parentNode.insertBefore(exampleSelect, dslInput);
+    </script>
+</body>
+</html>
