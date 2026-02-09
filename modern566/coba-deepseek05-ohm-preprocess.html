@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ohm.js with Indent Tokens</title>
+    <script src="https://unpkg.com/ohm-js@17/dist/ohm.min.js"></script>
+</head>
+<body>
+    <h2>Ohm.js dengan Indent Token</h2>
+    <textarea id="input" rows="15" cols="80">@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()
+shade at 10 30
+    getuk foo</textarea>
+    <br>
+    <button onclick="parse()">Parse</button>
+    <pre id="output"></pre>
+
+    <script>
+        const SPACE = '^'
+        // Ohm.js Grammar dengan indent token
+        const dslGrammar = ohm.grammar(String.raw`
+    DSL {
+        Program = Line*
+        
+        Line = Indent* Content
+        
+        Content = ElementLine | PropLine | DashLine
+        
+        ElementLine = DecoratedLine | NamedLine | CommandLine
+        
+        SimpleLine = ident
+        
+        DecoratedLine = "@" ident
+        NamedLine = ident ":" ident
+        CommandLine = "=" ident "()"
+        
+        PropLine = ident PropValue*
+        
+        PropValue = number | ident
+        
+        DashLine = "---"
+        
+        Indent = "${SPACE}"
+        
+        eol = "\r"? "\n"
+        
+        ident = letter (letter | digit | "-" | "_")*
+        number = ("-" | "+")? digit+ ("." digit+)?
+    }
+`);
+
+const semantics = dslGrammar.createSemantics().addOperation('toAST', {
+
+    // _(...children) {
+    //     return children
+    //         .map(c => c.toAST ? c.toAST() : c)
+    //         .flat();
+    // },
+
+    Program(lines) {
+        return lines.toAST();
+    },
+
+    Line(_, line) {
+        return line.toAST();
+    },
+
+    NamedLine(name, _, type) {
+                // const propsObj = _processProps(props.toAST());
+                // const childrenList = children.toAST();
+                
+                return {
+                    name: name.sourceString,
+                    type: type.sourceString,
+                    // props: propsObj,
+                    // children: dash.sourceString ? _processChildren(childrenList) : []
+                };
+            },
+    // DecoratedWithBlock(head, block) {
+    //     return {
+    //         type: 'decorated',
+    //         name: head.toAST(),
+    //         children: block.children.length ? block.toAST() : []
+    //     };
+    // },
+
+    DecoratedLine(_at, name) {
+        return name.sourceString;
+    },
+
+    // IndentedLine(_, content) {
+    //     return content.toAST();
+    // },
+
+    CommandLine(_,name,paren){
+        return {type: 'formula'}
+    },
+
+    SimpleLine(id) {
+        return {
+            type: 'simple',
+            value: id.sourceString
+        };
+    },
+
+    PropLine(key, values) {
+        return {
+            type: 'property',
+            key: key.sourceString,
+            value: values.toAST()
+        };
+    },
+
+    DashLine(_) {
+        return { type: 'separator' };
+    },
+// });
+
+    
+    number(sign, integer, dot, fraction) {
+                const signStr = sign.sourceString || '';
+                const integerStr = integer.sourceString;
+                const fractionStr = fraction.sourceString || '';
+                return parseFloat(signStr + integerStr + (fractionStr ? '.' + fractionStr : ''));
+            },
+
+    
+            ident(first, rest) {
+                return first.sourceString;
+            },
+            
+    
+    // PropValue_ident(id) {
+    //     return id.sourceString;
+    // },
+    
+    // PropValue_ColonValue(colonValue) {
+    //     return colonValue.toAST();
+    // },
+    
+    // ColonValue(_, value) {
+    //     return [":", value.toAST()];
+    // },
+
+     _iter(...children) {
+                    return children.map(c => c.toAST());
+                    return children;
+                },
+    
+    // ... lainnya
+});
+
+        // Preprocess function: ubah indentasi menjadi $
+        function preprocessIndent(text) {
+            const lines = text.replace(/^    /gm,SPACE)
+            console.log(lines);
+            return lines;
+
+            const lines2 = text.split('\n');
+            const result = [];
+            
+            for (const line of lines) {
+                if (line.trim() === '') {
+                    result.push('');
+                    continue;
+                }
+                
+                const content = line.trim();
+                const indent = line.match(/^\s*/)[0].length;
+                const indentTokens = SPACE.repeat(Math.floor(indent / 4));
+                
+                result.push(indentTokens + content);
+            }
+            
+            return result.join('\n');
+        }
+
+        // Parser utama
+        class DSLParser {
+            parse(text) {
+                console.log("Original input:");
+                console.log(text);
+                
+                // 1. Preprocess: ubah indentasi menjadi $
+                const processed = preprocessIndent(text);
+                console.log("\nProcessed (indent as $):");
+                console.log(processed);
+                
+                // 2. Parse dengan Ohm.js
+                const match = dslGrammar.match(processed);
+                if (match.failed()) {
+                    throw new Error(`Parse failed: ${match.message}`);
+                }
+                
+                // 3. Convert ke AST
+                const ast = semantics(match).toAST();
+                return ast;
+            }
+        }
+
+        // Test function
+        function parse() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+            
+            try {
+                const parser = new DSLParser();
+                const result = parser.parse(input);
+                
+                output.textContent = JSON.stringify(result, null, 2);
+                console.log("Result:", result);
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+                console.error(error);
+            }
+        }
+
+        // Parse on load
+        parse();
+    </script>
+</body>
+</html>

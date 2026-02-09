@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSL Layout Parser with Ohm.js</title>
+    <title>DSL Block Parser with Ohm.js</title>
     <script src="https://unpkg.com/ohm-js@17/dist/ohm.min.js"></script>
     <style>
         * {
@@ -368,7 +368,7 @@
     <div class="container">
         <div class="panel">
             <div class="panel-header">
-                <span>DSL Layout Input (Ohm.js Parser)</span>
+                <span>DSL Block Input (Ohm.js Parser)</span>
                 <div class="logo">
                     Powered by <span>Ohm.js</span>
                 </div>
@@ -381,11 +381,14 @@ normal
     size 280 354
     ---
     Minimize: button at -41 4 anchor right
-        =CLOSE()</textarea>
+        =CLOSE()
+shade at:10 30
+    getuk foo
+</textarea>
             
                 
                 <div class="example">
-                    <h4>📝 Contoh DSL Layout:</h4>
+                    <h4>📝 Contoh DSL Block:</h4>
                     <pre>@layout
 normal
     at 0 0
@@ -461,115 +464,182 @@ normal
     <script>
         // Ohm.js Grammar Definition
         const dslGrammar = ohm.grammar(String.raw`
-            DSL {
-                // Main entry point
-                Layout = Directive? Element+
-                
-                // Directive starts with @
-                Directive = "@" ident
-                
-                // Elements can have names or be anonymous
-                Element = NamedElement | AnonymousElement
-                
-                NamedElement = ident ":" Type Prop* Dash? Element*
-                AnonymousElement = Type Prop* Dash? Element*
-                
-                // Type identifier
-                Type = ident
-                
-                // Properties
-                Prop = PropKv | PropSimple
-                PropKv = ident ":" Value
-                PropSimple = ident Value+
-                
-                // Values
-                Value = number+ | string | ident
-                
-                // Triple dash separator
-                Dash = "---"
-                
-                // Lexical rules
-                ident = letter (letter | digit | "-" | "_")*
-                number = ("-" | "+")? digit+ ("." digit+)?
-                string = "\"" (~"\"" any)* "\""
-                
-                // Whitespace and indentation handled by semantics
-            }
-        `);
+    DSL {
+        // Main grammar - seluruh file DSL
+        File = Element*
+        
+        // Element bisa berupa: decorated, named, atau anonymous
+        Element = DecoratedElement | NamedElement | AnonymousElement
+        
+        // Decorated element: @type (props) children
+        DecoratedElement = "@" ident         -- type
+            (Prop | SpecialAnchor)* Dash? ChildElement*
+        
+        // Named element: name: type (props) children  
+        NamedElement = ident ":" Type
+            (Prop | SpecialAnchor)* Dash? ChildElement*
+        
+        // Anonymous element: type (props) children
+        AnonymousElement = Type
+            (Prop | SpecialAnchor)* Dash? ChildElement*
+        
+        // Child elements (indented)
+        ChildElement = Element
+        
+        // Type identifier
+        Type = ident | Command
+        
+        // Command seperti =CLOSE()
+        Command = "=" ident "(" ")"
+        
+        // Special anchor: at, size, anchor
+        SpecialAnchor = AnchorProp | SizeProp | AtProp
+        
+        AnchorProp = "anchor" ident
+        SizeProp = "size" number number
+        AtProp = "at" number number
+        
+        // Properties
+        Prop = PropKV | PropSimple
+        
+        // Key: value format
+        PropKV = ident ":" Value
+        
+        // Key value format (bisa multiple values)
+        PropSimple = ident Value*
+        
+        // Nilai bisa berupa: number, string, ident
+        Value = number | string | ident
+        
+        // Triple dash separator
+        Dash = "---"
+        
+        // Lexical rules - JANGAN tambah space/Newline rules
+        ident = letter (letter | digit | "-" | "_")*
+        number = ("-" | "+")? digit+ ("." digit+)?
+        string = "\"" (~"\"" any)* "\""
+    }
+`);
 
         // Semantics for the grammar
         const dslSemantics = dslGrammar.createSemantics().addOperation('toAST', {
-            Layout(directive, elements) {
-                const directiveValue = directive.toAST();
-                const elementList = elements.toAST();
-                
-                // If we have a directive, it becomes the first element
-                const children = directiveValue ? [directiveValue, ...elementList] : elementList;
-                
+            // File adalah kumpulan elements
+            File(elements) {
                 return {
                     type: 'file',
                     name: 'player-normal',
-                    children: children
+                    children: elements.toAST()
                 };
             },
             
-            Directive(_, name) {
-                return {
-                    type: name.sourceString,
-                    name: null,
-                    props: {},
-                    children: []
-                };
-            },
-            
-            NamedElement(name, _, type, props, dash, children) {
-                const propsObj = _processProps(props.toAST());
+            // Decorated element: @layout
+            DecoratedElement_atType(_, decorator, content, dash, children) {
+                const props = this._extractProps(content.toAST());
                 const childrenList = children.toAST();
                 
                 return {
+                    type: decorator.sourceString, // "layout"
+                    name: null,
+                    props: props,
+                    children: dash.sourceString ? childrenList : []
+                };
+            },
+            
+            // Named element: Minimize: button
+            NamedElement(name, _, type, content, dash, children) {
+                const props = this._extractProps(content.toAST());
+                const childrenList = children.toAST();
+                
+                return {
+                    type: type.toAST(),
                     name: name.sourceString,
-                    type: type.sourceString,
-                    props: propsObj,
-                    children: dash.sourceString ? _processChildren(childrenList) : []
+                    props: props,
+                    children: dash.sourceString ? childrenList : []
                 };
             },
             
-            AnonymousElement(type, props, dash, children) {
-                const propsObj = _processProps(props.toAST());
+            // Anonymous element: shade
+            AnonymousElement(type, content, dash, children) {
+                const props = this._extractProps(content.toAST());
                 const childrenList = children.toAST();
                 
                 return {
+                    type: type.toAST(),
                     name: null,
-                    type: type.sourceString,
-                    props: propsObj,
-                    children: dash.sourceString ? _processChildren(childrenList) : []
+                    props: props,
+                    children: dash.sourceString ? childrenList : []
                 };
             },
             
-            Type(name) {
+            // Type bisa berupa ident atau command
+            Type_ident(id) {
+                return id.sourceString;
+            },
+            Type_cmd(cmd) {
+                return cmd.sourceString;
+            },
+            
+            // Command: =CLOSE()
+            Command(_, name, _1, _2) {
                 return name.sourceString;
             },
             
-            PropKv(key, _, value) {
-                console.log('pk:',arguments)
+            // Special anchors
+            AnchorProp(_, anchor) {
+                return { key: 'anchor', value: anchor.sourceString };
+            },
+            
+            SizeProp(_, width, height) {
+                return { 
+                    key: 'size', 
+                    value: [parseFloat(width.sourceString), parseFloat(height.sourceString)] 
+                };
+            },
+
+            // Di semantics, tambah:
+ChildElement(element) {
+    return element.toAST();
+},
+            
+            AtProp(_, x, y) {
+                return { 
+                    key: 'at', 
+                    value: [parseFloat(x.sourceString), parseFloat(y.sourceString)] 
+                };
+            },
+            
+            // Properties
+            PropKV(key, _, value) {
                 return { key: key.sourceString, value: value.toAST() };
             },
             
             PropSimple(key, values) {
-                console.log('ps',arguments)
                 const valueList = values.toAST();
-                return { 
-                    key: key.sourceString, 
-                    value: valueList.length === 1 ? valueList[0] : valueList 
-                };
+                if (valueList.length === 1) {
+                    return { key: key.sourceString, value: valueList[0] };
+                } else if (valueList.length > 1) {
+                    return { key: key.sourceString, value: valueList };
+                } else {
+                    return { key: key.sourceString, value: true }; // Boolean prop
+                }
             },
             
-            Value(val) {
-                return val.toAST();
+            // Values
+            Value_number(num) {
+                return parseFloat(num.sourceString);
             },
             
-            ident(first, rest) {
-                return first.sourceString;
+            Value_string(str) {
+                return str.sourceString.slice(1, -1); // Remove quotes
+            },
+            
+            Value_ident(id) {
+                return id.sourceString;
+            },
+            
+            // Identifiers
+            ident(id) {
+                return id.sourceString;
             },
             
             number(sign, integer, dot, fraction) {
@@ -579,37 +649,45 @@ normal
                 return parseFloat(signStr + integerStr + (fractionStr ? '.' + fractionStr : ''));
             },
             
-            string(quote1, chars, quote2) {
+            string(open, chars, close) {
                 return chars.sourceString;
-                // return s.sourceString.slice(1, -1); // Remove quotes
             },
             
-              _iter(...children) {
-                    // return children.map(c => c.raw());
-                    return children;
-                },
+            // Helper method untuk extract props
+            _extractProps(contentArray) {
+                const props = {};
+                contentArray.forEach(item => {
+                    if (item && item.key) {
+                        props[item.key] = item.value;
+                    }
+                });
+                return props;
+            }
         });
 
 
-            // Helper methods
-            function _processProps(propsArray) {
-                console.log(propsArray);
-                const result = {};
-                propsArray.forEach(prop => {
-                    if (prop.key === 'at' || prop.key === 'size') {
-                        // Ensure these are arrays
-                        result[prop.key] = Array.isArray(prop.value) ? prop.value : [prop.value];
-                    } else {
+        // Helper methods
+        function _processProps(propsArray) {
+            const result = {};
+            propsArray.forEach(prop => {
+                // Handle array values for at/size
+                if (prop.key === 'at' || prop.key === 'size' || prop.key === 'anchor') {
+                    if (Array.isArray(prop.value)) {
                         result[prop.key] = prop.value;
+                    } else {
+                        result[prop.key] = [prop.value];
                     }
-                });
-                return result;
-            }
-            
-            function _processChildren(childrenArray) {
-                // Filter out empty children and handle indentation
-                return childrenArray.filter(child => child !== null);
-            }
+                } else {
+                    result[prop.key] = prop.value;
+                }
+            });
+            return result;
+        }
+        
+        function _processChildren(childrenArray) {
+            // Filter out empty children and handle indentation
+            return childrenArray.filter(child => child !== null);
+        }
 
         // Parser class with Ohm.js
         class DSLParserOhm {
@@ -621,6 +699,7 @@ normal
             parse(dslText) {
                 try {
                     // Preprocess: Handle indentation by adding it to the grammar matching
+                    dslText = dslText.replace('\t', '    ');
                     const lines = dslText.split('\n');
                     const processedLines = this._preprocessLines(lines);
                     
@@ -654,7 +733,7 @@ normal
                     const content = line.trim();
                     
                     // Mark indentation level for post-processing
-                    return `${'  '.repeat(Math.floor(indent / 2))}${content}`;
+                    return `${'    '.repeat(Math.floor(indent / 4))}${content}`;
                 });
             }
             
@@ -676,6 +755,7 @@ normal
                 };
                 
                 let stack = [{ node: root, indent: -1 }];
+                let currentElement = null;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
@@ -684,19 +764,17 @@ normal
                     const indent = line.match(/^\s*/)[0].length;
                     const content = line.trim();
                     
-                    // Parse the line using Ohm for the content
-                    const element = this._parseLineContent(content);
-                    
-                    // Find the right parent based on indentation
-                    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-                        stack.pop();
-                    }
-                    
-                    const parent = stack[stack.length - 1].node;
-                    
-                    if (element) {
-                        parent.children.push(element);
-                        stack.push({ node: element, indent });
+                    // Parse based on indentation level
+                    if (indent === 0) {
+                        // Top-level element
+                        currentElement = this._parseTopLevelElement(content);
+                        if (currentElement) {
+                            root.children.push(currentElement);
+                            stack = [{ node: root, indent: -1 }, { node: currentElement, indent: 0 }];
+                        }
+                    } else {
+                        // Handle child or property
+                        this._parseChildOrProp(content, indent, stack, currentElement);
                     }
                 }
                 
@@ -719,7 +797,7 @@ normal
                     
                     // Try to parse as a directive
                     if (line.startsWith('@')) {
-                        const dirMatch = this.grammar.match(line, 'Directive');
+                        const dirMatch = this.grammar.match(line, 'Decorator');
                         if (!dirMatch.failed()) {
                             return this.semantics(dirMatch).toAST();
                         }
@@ -731,7 +809,163 @@ normal
                     return null;
                 }
             }
+            _parseTopLevelElement(line) {
+                // Handle decorated elements: @layout
+                if (line.startsWith('@')) {
+                    const decorator = line.substring(1); // Remove @
+                    return {
+                        type: decorator,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                // Handle named elements: name: type
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const rest = parts.slice(1).join(':').trim();
+                        const type = rest.split(/\s+/)[0]; // First word after colon
+                        
+                        return {
+                            type: type,
+                            name: name,
+                            props: {},
+                            children: []
+                        };
+                    }
+                }
+                
+                // Handle anonymous elements: just type
+                const type = line.split(/\s+/)[0];
+                return {
+                    type: type,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+            }
+        
+            _parseChildOrProp(line, indent, stack, currentElement) {
+                // Find the right parent based on indentation
+                while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+                    stack.pop();
+                }
+                
+                const parent = stack[stack.length - 1].node;
+                
+                // Check if it's a prop (key: value or key value...)
+                if (line.includes(':') || /^[a-zA-Z][a-zA-Z0-9]*\s+/.test(line)) {
+                    // Parse as property
+                    const prop = this._parseProp(line);
+                    if (prop && parent) {
+                        if (!parent.props) parent.props = {};
+                        
+                        // Handle special cases for at/size/anchor
+                        if (prop.key === 'at' || prop.key === 'size') {
+                            // Parse array values
+                            if (typeof prop.value === 'string') {
+                                const values = prop.value.split(' ').map(v => {
+                                    const num = parseFloat(v);
+                                    return isNaN(num) ? v : num;
+                                });
+                                parent.props[prop.key] = values;
+                            } else {
+                                parent.props[prop.key] = [prop.value];
+                            }
+                        } else if (prop.key === 'anchor') {
+                            parent.props[prop.key] = prop.value;
+                        } else {
+                            parent.props[prop.key] = prop.value;
+                        }
+                    }
+                } else if (line === '---') {
+                    // Triple dash separator - children will follow
+                    // Nothing to do here, just mark that next lines are children
+                } else {
+                    // Parse as child element
+                    const child = this._parseChildElement(line);
+                    if (child && parent) {
+                        if (!parent.children) parent.children = [];
+                        parent.children.push(child);
+                        stack.push({ node: child, indent: indent });
+                    }
+                }
+            }
+        
+            _parseChildElement(line) {
+                // Similar to _parseTopLevelElement but for children
+                if (line.startsWith('=')) {
+                    // Special command like =CLOSE()
+                    return {
+                        type: line,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const rest = parts.slice(1).join(':').trim();
+                        const type = rest.split(/\s+/)[0];
+                        
+                        return {
+                            type: type,
+                            name: name,
+                            props: {},
+                            children: []
+                        };
+                    }
+                }
+                
+                const type = line.split(/\s+/)[0];
+                return {
+                    type: type,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+            }
+            _parseProp(line) {
+                // Parse as key: value
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    const key = parts[0].trim();
+                    const value = parts.slice(1).join(':').trim();
+                    
+                    // Try to parse as number
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && value === numValue.toString()) {
+                        return { key, value: numValue };
+                    }
+                    
+                    return { key, value };
+                }
+                
+                // Parse as key value1 value2...
+                const parts = line.split(/\s+/);
+                if (parts.length >= 2) {
+                    const key = parts[0];
+                    const value = parts.slice(1).join(' ');
+                    
+                    // Try to parse single number
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && value === numValue.toString()) {
+                        return { key, value: numValue };
+                    }
+                    
+                    return { key, value };
+                }
+                
+                return null;
+            }
         }
+        
 
         // DOM elements
         const dslInput = document.getElementById('dslInput');
@@ -752,10 +986,10 @@ normal
         // Display grammar
         grammarView.innerHTML = `<span class="grammar-keyword">DSL</span> {
   <span class="grammar-comment">// Main entry point</span>
-  <span class="grammar-rule">Layout</span> = <span class="grammar-rule">Directive</span>? <span class="grammar-rule">Element</span>+
+  <span class="grammar-rule">Block</span> = <span class="grammar-rule">Decorator</span>? <span class="grammar-rule">Element</span>+
   
-  <span class="grammar-comment">// Directive starts with @</span>
-  <span class="grammar-rule">Directive</span> = "@" <span class="grammar-rule">ident</span>
+  <span class="grammar-comment">// Decorator starts with @</span>
+  <span class="grammar-rule">Decorator</span> = "@" <span class="grammar-rule">ident</span>
   
   <span class="grammar-comment">// Elements can have names or be anonymous</span>
   <span class="grammar-rule">Element</span> = <span class="grammar-rule">NamedElement</span> | <span class="grammar-rule">AnonymousElement</span>

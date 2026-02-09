@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Indent Parser</title>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            padding: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        pre {
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h2>Simple Indent Parser untuk DSL</h2>
+    
+    <textarea id="dslInput">@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        =CLOSE()
+shade at 10 30
+    getuk foo</textarea>
+    
+    <button onclick="parseDSL()">Parse DSL</button>
+    
+    <h3>Hasil JSON:</h3>
+    <pre id="output"></pre>
+    
+    <script>
+        class SimpleIndentParser {
+            parse(text) {
+                const lines = text.split('\n');
+                const root = { 
+                    type: 'file', 
+                    name: 'player-normal', 
+                    children: [] 
+                };
+                
+                // Stack untuk track parent berdasarkan indentasi
+                const stack = [{ node: root, indent: -1 }];
+                let currentPropsNode = null;
+                let afterDash = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.trim() === '') continue;
+                    
+                    const indent = line.match(/^\s*/)[0].length;
+                    const content = line.trim();
+                    
+                    // Cari parent yang sesuai berdasarkan indentasi
+                    while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+                        stack.pop();
+                    }
+                    
+                    const parent = stack[stack.length - 1].node;
+                    
+                    // Parse konten baris
+                    if (content === '---') {
+                        // Triple dash: mulai children section
+                        afterDash = true;
+                        continue;
+                    }
+                    
+                    if (afterDash || indent > parent.indent + 1) {
+                        // Ini adalah child element
+                        const child = this.parseElement(content, indent);
+                        if (child) {
+                            if (!parent.children) parent.children = [];
+                            parent.children.push(child);
+                            
+                            // Jika element punya children, push ke stack
+                            if (child.type !== 'command') {
+                                stack.push({ node: child, indent: indent });
+                            }
+                        }
+                        afterDash = false;
+                    } else {
+                        // Ini adalah property atau element baru
+                        if (this.isElementLine(content)) {
+                            // Element baru (top-level atau sibling)
+                            const element = this.parseElement(content, indent);
+                            if (element) {
+                                // Cari parent yang benar untuk element baru
+                                let actualParent = root;
+                                for (let j = stack.length - 1; j >= 0; j--) {
+                                    if (stack[j].indent < indent) {
+                                        actualParent = stack[j].node;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!actualParent.children) actualParent.children = [];
+                                actualParent.children.push(element);
+                                
+                                // Update stack
+                                while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+                                    stack.pop();
+                                }
+                                stack.push({ node: element, indent: indent });
+                            }
+                            currentPropsNode = null;
+                            afterDash = false;
+                        } else {
+                            // Property untuk element terakhir
+                            const prop = this.parseProperty(content);
+                            if (prop && stack.length > 0) {
+                                const targetNode = stack[stack.length - 1].node;
+                                if (!targetNode.props) targetNode.props = {};
+                                
+                                // Handle special cases
+                                if (prop.key === 'at' || prop.key === 'size') {
+                                    targetNode.props[prop.key] = Array.isArray(prop.value) 
+                                        ? prop.value 
+                                        : [prop.value];
+                                } else {
+                                    targetNode.props[prop.key] = prop.value;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return root;
+            }
+            
+            isElementLine(line) {
+                // Cek apakah baris ini element (bukan property)
+                return line.startsWith('@') || 
+                       line.includes(':') || 
+                       line.startsWith('=') ||
+                       /^[a-zA-Z][a-zA-Z0-9]*$/.test(line.split(' ')[0]);
+            }
+            
+            parseElement(line, indent) {
+                // Decorated element: @layout
+                if (line.startsWith('@')) {
+                    const type = line.substring(1);
+                    return {
+                        type: type,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                // Command: =CLOSE()
+                if (line.startsWith('=')) {
+                    return {
+                        type: line,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                // Named element: Minimize: button
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const rest = parts.slice(1).join(':').trim().split(' ');
+                        const type = rest[0];
+                        
+                        const element = {
+                            type: type,
+                            name: name,
+                            props: {},
+                            children: []
+                        };
+                        
+                        // Parse props yang ada di baris yang sama
+                        if (rest.length > 1) {
+                            let i = 1;
+                            while (i < rest.length) {
+                                if (rest[i] === 'at' && i + 2 < rest.length) {
+                                    element.props.at = [parseFloat(rest[i+1]), parseFloat(rest[i+2])];
+                                    i += 3;
+                                } else if (rest[i] === 'anchor' && i + 1 < rest.length) {
+                                    element.props.anchor = rest[i+1];
+                                    i += 2;
+                                } else {
+                                    i++;
+                                }
+                            }
+                        }
+                        
+                        return element;
+                    }
+                }
+                
+                // Anonymous element: normal, shade, getuk
+                const parts = line.split(' ');
+                const type = parts[0];
+                
+                const element = {
+                    type: type,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+                
+                // Parse props yang ada di baris yang sama
+                if (parts.length > 1) {
+                    let i = 1;
+                    while (i < parts.length) {
+                        if (parts[i] === 'at' && i + 2 < parts.length) {
+                            element.props.at = [parseFloat(parts[i+1]), parseFloat(parts[i+2])];
+                            i += 3;
+                        } else if (parts[i] === 'size' && i + 2 < parts.length) {
+                            element.props.size = [parseFloat(parts[i+1]), parseFloat(parts[i+2])];
+                            i += 3;
+                        } else {
+                            i++;
+                        }
+                    }
+                }
+                
+                return element;
+            }
+            
+            parseProperty(line) {
+                // Property format: key value1 value2...
+                const parts = line.split(' ');
+                if (parts.length === 0) return null;
+                
+                const key = parts[0];
+                
+                if (parts.length === 1) {
+                    // Boolean property
+                    return { key, value: true };
+                } else if (parts.length === 2) {
+                    // Single value
+                    const value = parts[1];
+                    const numValue = parseFloat(value);
+                    return { 
+                        key, 
+                        value: isNaN(numValue) ? value : numValue 
+                    };
+                } else {
+                    // Multiple values
+                    const values = parts.slice(1).map(v => {
+                        const num = parseFloat(v);
+                        return isNaN(num) ? v : num;
+                    });
+                    return { key, value: values };
+                }
+            }
+        }
+        
+        function parseDSL() {
+            const parser = new SimpleIndentParser();
+            const input = document.getElementById('dslInput').value;
+            
+            console.log("=== PARSING DSL ===");
+            console.log("Input:", input);
+            
+            try {
+                const result = parser.parse(input);
+                
+                console.log("Result:", result);
+                console.log("JSON:", JSON.stringify(result, null, 2));
+                
+                document.getElementById('output').textContent = 
+                    JSON.stringify(result, null, 2);
+                    
+            } catch (error) {
+                console.error("Parse error:", error);
+                document.getElementById('output').textContent = 
+                    "Error: " + error.message;
+            }
+        }
+        
+        // Parse saat halaman load
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log("Simple Indent Parser siap!");
+            parseDSL();
+        });
+    </script>
+</body>
+</html>

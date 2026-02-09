@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSL Layout Parser with Ohm.js</title>
+    <title>DSL Block Parser with Ohm.js</title>
     <script src="https://unpkg.com/ohm-js@17/dist/ohm.min.js"></script>
     <style>
         * {
@@ -368,7 +368,7 @@
     <div class="container">
         <div class="panel">
             <div class="panel-header">
-                <span>DSL Layout Input (Ohm.js Parser)</span>
+                <span>DSL Block Input (Ohm.js Parser)</span>
                 <div class="logo">
                     Powered by <span>Ohm.js</span>
                 </div>
@@ -381,11 +381,14 @@ normal
     size 280 354
     ---
     Minimize: button at -41 4 anchor right
-        =CLOSE()</textarea>
+        =CLOSE()
+shade at 10 30
+    getuk foo
+</textarea>
             
                 
                 <div class="example">
-                    <h4>📝 Contoh DSL Layout:</h4>
+                    <h4>📝 Contoh DSL Block:</h4>
                     <pre>@layout
 normal
     at 0 0
@@ -463,10 +466,10 @@ normal
         const dslGrammar = ohm.grammar(String.raw`
             DSL {
                 // Main entry point
-                Layout = Directive? Element+
+                Block = Decorator Element+
                 
-                // Directive starts with @
-                Directive = "@" ident
+                // Decorator starts with @
+                Decorator = "@" ident
                 
                 // Elements can have names or be anonymous
                 Element = NamedElement | AnonymousElement
@@ -480,10 +483,11 @@ normal
                 // Properties
                 Prop = PropKv | PropSimple
                 PropKv = ident ":" Value
-                PropSimple = ident Value+
+                PropSimple = ident (Value+ | ident+)  // support both values and identifiers
                 
                 // Values
-                Value = number+ | string | ident
+                Value = number | string | ident | special
+                special = "=" ident "()"  // untuk =CLOSE()
                 
                 // Triple dash separator
                 Dash = "---"
@@ -499,12 +503,14 @@ normal
 
         // Semantics for the grammar
         const dslSemantics = dslGrammar.createSemantics().addOperation('toAST', {
-            Layout(directive, elements) {
+            Block(directive, elements) {
+                console.log(arguments)
                 const directiveValue = directive.toAST();
                 const elementList = elements.toAST();
                 
                 // If we have a directive, it becomes the first element
-                const children = directiveValue ? [directiveValue, ...elementList] : elementList;
+                // const children = directiveValue ? [directiveValue, ...elementList] : elementList;
+                const children = elementList.map( el => ({...el, type: directiveValue}) );
                 
                 return {
                     type: 'file',
@@ -513,15 +519,10 @@ normal
                 };
             },
             
-            Directive(_, name) {
-                return {
-                    type: name.sourceString,
-                    name: null,
-                    props: {},
-                    children: []
-                };
+            Decorator(_, name) {
+                return name
             },
-            
+                        
             NamedElement(name, _, type, props, dash, children) {
                 const propsObj = _processProps(props.toAST());
                 const childrenList = children.toAST();
@@ -593,12 +594,15 @@ normal
 
             // Helper methods
             function _processProps(propsArray) {
-                console.log(propsArray);
                 const result = {};
                 propsArray.forEach(prop => {
-                    if (prop.key === 'at' || prop.key === 'size') {
-                        // Ensure these are arrays
-                        result[prop.key] = Array.isArray(prop.value) ? prop.value : [prop.value];
+                    // Handle array values for at/size
+                    if (prop.key === 'at' || prop.key === 'size' || prop.key === 'anchor') {
+                        if (Array.isArray(prop.value)) {
+                            result[prop.key] = prop.value;
+                        } else {
+                            result[prop.key] = [prop.value];
+                        }
                     } else {
                         result[prop.key] = prop.value;
                     }
@@ -621,8 +625,10 @@ normal
             parse(dslText) {
                 try {
                     // Preprocess: Handle indentation by adding it to the grammar matching
+                    dslText = dslText.replace('\t', '    ');
                     const lines = dslText.split('\n');
                     const processedLines = this._preprocessLines(lines);
+                    console.log(processedLines)
                     
                     // Join back and parse
                     const input = processedLines.join('\n');
@@ -654,7 +660,7 @@ normal
                     const content = line.trim();
                     
                     // Mark indentation level for post-processing
-                    return `${'  '.repeat(Math.floor(indent / 2))}${content}`;
+                    return `${'    '.repeat(Math.floor(indent / 4))}${content}`;
                 });
             }
             
@@ -676,6 +682,7 @@ normal
                 };
                 
                 let stack = [{ node: root, indent: -1 }];
+                let currentElement = null;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
@@ -684,19 +691,17 @@ normal
                     const indent = line.match(/^\s*/)[0].length;
                     const content = line.trim();
                     
-                    // Parse the line using Ohm for the content
-                    const element = this._parseLineContent(content);
-                    
-                    // Find the right parent based on indentation
-                    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-                        stack.pop();
-                    }
-                    
-                    const parent = stack[stack.length - 1].node;
-                    
-                    if (element) {
-                        parent.children.push(element);
-                        stack.push({ node: element, indent });
+                    // Parse based on indentation level
+                    if (indent === 0) {
+                        // Top-level element
+                        currentElement = this._parseTopLevelElement(content);
+                        if (currentElement) {
+                            root.children.push(currentElement);
+                            stack = [{ node: root, indent: -1 }, { node: currentElement, indent: 0 }];
+                        }
+                    } else {
+                        // Handle child or property
+                        this._parseChildOrProp(content, indent, stack, currentElement);
                     }
                 }
                 
@@ -718,12 +723,12 @@ normal
                     }
                     
                     // Try to parse as a directive
-                    if (line.startsWith('@')) {
-                        const dirMatch = this.grammar.match(line, 'Directive');
-                        if (!dirMatch.failed()) {
-                            return this.semantics(dirMatch).toAST();
-                        }
-                    }
+                    // if (line.startsWith('@')) {
+                    //     const dirMatch = this.grammar.match(line, 'Decorator');
+                    //     if (!dirMatch.failed()) {
+                    //         return this.semantics(dirMatch).toAST();
+                    //     }
+                    // }
                     
                     return null;
                 } catch (e) {
@@ -731,7 +736,163 @@ normal
                     return null;
                 }
             }
+            _parseTopLevelElement(line) {
+                // Handle decorated elements: @layout
+                if (line.startsWith('@')) {
+                    const decorator = line.substring(1); // Remove @
+                    return {
+                        type: decorator,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                // Handle named elements: name: type
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const rest = parts.slice(1).join(':').trim();
+                        const type = rest.split(/\s+/)[0]; // First word after colon
+                        
+                        return {
+                            type: type,
+                            name: name,
+                            props: {},
+                            children: []
+                        };
+                    }
+                }
+                
+                // Handle anonymous elements: just type
+                const type = line.split(/\s+/)[0];
+                return {
+                    type: type,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+            }
+        
+            _parseChildOrProp(line, indent, stack, currentElement) {
+                // Find the right parent based on indentation
+                while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+                    stack.pop();
+                }
+                
+                const parent = stack[stack.length - 1].node;
+                
+                // Check if it's a prop (key: value or key value...)
+                if (line.includes(':') || /^[a-zA-Z][a-zA-Z0-9]*\s+/.test(line)) {
+                    // Parse as property
+                    const prop = this._parseProp(line);
+                    if (prop && parent) {
+                        if (!parent.props) parent.props = {};
+                        
+                        // Handle special cases for at/size/anchor
+                        if (prop.key === 'at' || prop.key === 'size') {
+                            // Parse array values
+                            if (typeof prop.value === 'string') {
+                                const values = prop.value.split(' ').map(v => {
+                                    const num = parseFloat(v);
+                                    return isNaN(num) ? v : num;
+                                });
+                                parent.props[prop.key] = values;
+                            } else {
+                                parent.props[prop.key] = [prop.value];
+                            }
+                        } else if (prop.key === 'anchor') {
+                            parent.props[prop.key] = prop.value;
+                        } else {
+                            parent.props[prop.key] = prop.value;
+                        }
+                    }
+                } else if (line === '---') {
+                    // Triple dash separator - children will follow
+                    // Nothing to do here, just mark that next lines are children
+                } else {
+                    // Parse as child element
+                    const child = this._parseChildElement(line);
+                    if (child && parent) {
+                        if (!parent.children) parent.children = [];
+                        parent.children.push(child);
+                        stack.push({ node: child, indent: indent });
+                    }
+                }
+            }
+        
+            _parseChildElement(line) {
+                // Similar to _parseTopLevelElement but for children
+                if (line.startsWith('=')) {
+                    // Special command like =CLOSE()
+                    return {
+                        type: line,
+                        name: null,
+                        props: {},
+                        children: []
+                    };
+                }
+                
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const rest = parts.slice(1).join(':').trim();
+                        const type = rest.split(/\s+/)[0];
+                        
+                        return {
+                            type: type,
+                            name: name,
+                            props: {},
+                            children: []
+                        };
+                    }
+                }
+                
+                const type = line.split(/\s+/)[0];
+                return {
+                    type: type,
+                    name: null,
+                    props: {},
+                    children: []
+                };
+            }
+            _parseProp(line) {
+                // Parse as key: value
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    const key = parts[0].trim();
+                    const value = parts.slice(1).join(':').trim();
+                    
+                    // Try to parse as number
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && value === numValue.toString()) {
+                        return { key, value: numValue };
+                    }
+                    
+                    return { key, value };
+                }
+                
+                // Parse as key value1 value2...
+                const parts = line.split(/\s+/);
+                if (parts.length >= 2) {
+                    const key = parts[0];
+                    const value = parts.slice(1).join(' ');
+                    
+                    // Try to parse single number
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && value === numValue.toString()) {
+                        return { key, value: numValue };
+                    }
+                    
+                    return { key, value };
+                }
+                
+                return null;
+            }
         }
+        
 
         // DOM elements
         const dslInput = document.getElementById('dslInput');
@@ -752,10 +913,10 @@ normal
         // Display grammar
         grammarView.innerHTML = `<span class="grammar-keyword">DSL</span> {
   <span class="grammar-comment">// Main entry point</span>
-  <span class="grammar-rule">Layout</span> = <span class="grammar-rule">Directive</span>? <span class="grammar-rule">Element</span>+
+  <span class="grammar-rule">Block</span> = <span class="grammar-rule">Decorator</span>? <span class="grammar-rule">Element</span>+
   
-  <span class="grammar-comment">// Directive starts with @</span>
-  <span class="grammar-rule">Directive</span> = "@" <span class="grammar-rule">ident</span>
+  <span class="grammar-comment">// Decorator starts with @</span>
+  <span class="grammar-rule">Decorator</span> = "@" <span class="grammar-rule">ident</span>
   
   <span class="grammar-comment">// Elements can have names or be anonymous</span>
   <span class="grammar-rule">Element</span> = <span class="grammar-rule">NamedElement</span> | <span class="grammar-rule">AnonymousElement</span>
@@ -820,6 +981,7 @@ normal
                 
                 // Use the indentation-aware parser
                 const result = parser.parseWithIndentation(dslInput.value);
+                // const result = parser.parse(dslInput.value);
                 
                 // Display JSON output
                 output.textContent = JSON.stringify(result, null, 2);

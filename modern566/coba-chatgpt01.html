@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DSL Parser Playground</title>
+  <style>
+    body {
+      font-family: monospace;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 100vh;
+      margin: 0;
+    }
+    textarea {
+      padding: 12px;
+      border: none;
+      border-right: 1px solid #ccc;
+      resize: none;
+      font-size: 14px;
+      outline: none;
+    }
+    pre {
+      margin: 0;
+      padding: 12px;
+      background: #f7f7f7;
+      overflow: auto;
+    }
+    .header {
+      grid-column: 1 / -1;
+      padding: 6px 12px;
+      background: #222;
+      color: #fff;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">DSL → Statement stream (indent normalized)</div>
+  <textarea id="input">
+@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        panel at 1 1 size 5 5
+        =MINIMZE()
+mini at 10 30 size 280 354
+    ---
+    panel at 2 6 size 10 20
+        =CLOSE()
+  </textarea>
+  <pre id="output"></pre>
+
+  <script>
+    function normalizeIndent(text) {
+      const lines = text.replace(/\r/g, '').split('\n');
+      const result = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        if (!raw.trim()) continue;
+
+        const m = raw.match(/^(\s*)(.*)$/);
+        const spaces = m[1].replace(/\t/g, '    ').length;
+        const level = Math.floor(spaces / 4);
+        const content = m[2];
+
+        result.push({
+          indent: level,
+          raw: '^'.repeat(level) + content,
+          content
+        });
+      }
+      return result;
+    }
+
+    function parseStatement(line) {
+      const s = line.content.trim();
+
+      if (s.startsWith('@')) {
+        return { kind: 'decorator', name: s.slice(1) };
+      }
+      if (s === '---' || s === '----') {
+        return { kind: 'separator' };
+      }
+      if (s.startsWith('=')) {
+        return { kind: 'anon_prop', name: s.slice(1) };
+      }
+
+      // element: [label:] type props...
+      let label = null;
+      let rest = s;
+      if (s.includes(':')) {
+        const idx = s.indexOf(':');
+        label = s.slice(0, idx).trim();
+        rest = s.slice(idx + 1).trim();
+      }
+
+      const parts = rest.split(/\s+/);
+      const type = parts.shift();
+      const props = parts;
+
+      return {
+        kind: 'element',
+        label,
+        type,
+        props
+      };
+    }
+
+    function run() {
+      const input = document.getElementById('input').value;
+      const lines = normalizeIndent(input);
+
+      const stmts = lines.map(l => ({
+        indent: l.indent,
+        raw: l.raw,
+        stmt: parseStatement(l)
+      }));
+
+      document.getElementById('output').textContent = JSON.stringify(stmts, null, 2);
+    }
+
+    document.getElementById('input').addEventListener('input', run);
+    run();
+  </script>
+</body>
+</html>
