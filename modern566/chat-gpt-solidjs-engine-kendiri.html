@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <meta charset="UTF-8" />
+   <title>Mini VTree Playground</title>
+   <style>
+      body {
+         font-family: sans-serif;
+         display: flex;
+         gap: 12px;
+         height: 100vh;
+         margin: 0;
+      }
+
+      textarea {
+         width: 70%;
+         font-family: monospace;
+         font-size: 13px;
+      }
+
+      #viewer {
+         flex: 1;
+         border-left: 1px solid #ccc;
+         padding: 10px;
+      }
+
+      .window {
+         border: 1px solid #666;
+         margin-bottom: 10px;
+      }
+
+      .title {
+         padding: 4px;
+         font-weight: bold;
+      }
+
+      .title.focused {
+         background: orange;
+      }
+
+      .title.unfocused {
+         background: #ddd;
+      }
+
+      .content {
+         padding: 6px;
+      }
+   </style>
+</head>
+
+<body>
+
+   <textarea id="state">
+{
+  "focused": "main",
+  "windows": [
+    { "id": "main", "title": "Main Window" },
+    { "id": "eq", "title": "EQ Window" }
+  ]
+}
+</textarea>
+
+   <div id="viewer"></div>
+
+   <script>
+      /* ---------------------------
+       * Virtual Node helper
+       * --------------------------- */
+      function h(type, props, children = []) {
+         return { type, props, children, _el: null };
+      }
+
+      /* ---------------------------
+       * Build virtual tree from state
+       * --------------------------- */
+      function buildTree(state) {
+         return h('div', {}, state.windows.map(win =>
+            h('div', { class: 'window' }, [
+               h(
+                  'div',
+                  {
+                     class:
+                        'title ' +
+                        (state.focused === win.id ? 'focused' : 'unfocused')
+                  },
+                  [win.title]
+               ),
+               h('div', { class: 'content' }, [
+                  `window id: ${win.id}`
+               ])
+            ])
+         ));
+      }
+
+      /* ---------------------------
+       * Initial render
+       * --------------------------- */
+      function mount(vnode, parent) {
+         const el =
+            typeof vnode === 'string'
+               ? document.createTextNode(vnode)
+               : document.createElement(vnode.type);
+
+         vnode._el = el;
+
+         if (typeof vnode !== 'string') {
+            for (const [k, v] of Object.entries(vnode.props || {})) {
+               el.setAttribute(k, v);
+            }
+
+            vnode.children.forEach(c => mount(c, el));
+         }
+
+         parent.appendChild(el);
+      }
+
+      /* ---------------------------
+       * Patch (diff & update)
+       * --------------------------- */
+      function patch(oldNode, newNode, parent) {
+         if (!oldNode) {
+            mount(newNode, parent);
+            return;
+         }
+
+         if (!newNode) {
+            parent.removeChild(oldNode._el);
+            return;
+         }
+
+         // Text node
+         if (typeof oldNode === 'string' || typeof newNode === 'string') {
+            if (oldNode !== newNode) {
+               if(parent.childNodes.length <=1){
+                  parent.textContent = newNode;
+                  return
+               }
+               const text = document.createTextNode(newNode);
+               if(oldNode._el){
+                  parent.replaceChild(text, oldNode._el);
+               }
+               newNode._el = text;
+            } else {
+               newNode._el = oldNode._el;
+            }
+            return;
+         }
+
+         // Different element type
+         if (oldNode.type !== newNode.type) {
+            mount(newNode, parent);
+            parent.replaceChild(newNode._el, oldNode._el);
+            return;
+         }
+
+         // Same type → update props
+         const el = (newNode._el = oldNode._el);
+
+         for (const k in { ...oldNode.props, ...newNode.props }) {
+            const oldVal = oldNode.props?.[k];
+            const newVal = newNode.props?.[k];
+            if (oldVal !== newVal) {
+               if (newVal == null) el.removeAttribute(k);
+               else el.setAttribute(k, newVal);
+            }
+         }
+
+         // Children
+         const max = Math.max(
+            oldNode.children.length,
+            newNode.children.length
+         );
+
+         for (let i = 0; i < max; i++) {
+            patch(
+               oldNode.children[i],
+               newNode.children[i],
+               el
+            );
+         }
+      }
+
+      /* ---------------------------
+       * Glue: textarea → render
+       * --------------------------- */
+      const textarea = document.getElementById('state');
+      const viewer = document.getElementById('viewer');
+
+      let oldTree = null;
+
+      function update() {
+         try {
+            const state = JSON.parse(textarea.value);
+            const newTree = buildTree(state);
+
+            if (!oldTree) {
+               mount(newTree, viewer);
+            } else {
+               patch(oldTree, newTree, viewer);
+            }
+
+            oldTree = newTree;
+         } catch (e) {
+            console.warn('Invalid JSON', e);
+         }
+      }
+
+      textarea.addEventListener('input', update);
+      update();
+   </script>
+
+</body>
+
+</html>
