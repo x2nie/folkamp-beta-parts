@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Ultra Lean Production Renderer</title>
+<style>
+body {
+  margin: 0;
+  display: flex;
+  height: 100vh;
+  font-family: monospace;
+}
+#editor {
+  width: 50%;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+  box-sizing: border-box;
+}
+#preview {
+  width: 50%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+}
+.window {
+  background: #222;
+  color: #0f0;
+  padding: 10px;
+}
+.list-item {
+  padding: 4px;
+  border-bottom: 1px solid #333;
+}
+</style>
+</head>
+<body>
+
+<div id="editor">
+<textarea id="jsonInput">
+{
+  "type": "div",
+  "props": { "class": "window" },
+  "children": [
+    { "type": "text", "value": "Winamp Main" },
+    {
+      "type": "list",
+      "key": "playlist",
+      "items": [
+        { "id": 1, "label": "Track 01.mp3" },
+        { "id": 2, "label": "Track 02.mp3" }
+      ]
+    }
+  ]
+}
+</textarea>
+</div>
+
+<div id="preview"></div>
+
+<script>
+
+// =============================
+// Scheduler (Microtask Batch)
+// =============================
+
+let scheduled = false
+let nextAST = null
+
+function scheduleRender(ast) {
+  nextAST = ast
+  if (!scheduled) {
+    scheduled = true
+    queueMicrotask(() => {
+      scheduled = false
+      render(nextAST)
+    })
+  }
+}
+
+// =============================
+// Renderer Core
+// =============================
+
+let oldVNode = null
+const container = document.getElementById("preview")
+
+function render(newVNode) {
+  if (!oldVNode) {
+    mount(newVNode, container)
+  } else {
+    patch(oldVNode, newVNode, container.firstChild)
+  }
+  oldVNode = newVNode
+}
+
+function mount(vnode, parent) {
+  const el = createElement(vnode)
+  parent.appendChild(el)
+  vnode._el = el
+}
+
+function createElement(vnode) {
+
+  if (vnode.type === "text") {
+    const el = document.createTextNode(vnode.value)
+    vnode._el = el
+    return el
+  }
+
+  if (vnode.type === "list") {
+    const wrapper = document.createElement("div")
+    wrapper._items = new Map()
+    patchList(wrapper, [], vnode.items)
+    vnode._el = wrapper
+    return wrapper
+  }
+
+  const el = document.createElement(vnode.type)
+
+  patchProps(el, {}, vnode.props)
+
+  ;(vnode.children || []).forEach(child => {
+    mount(child, el)
+  })
+
+  vnode._el = el
+  return el
+}
+
+// =============================
+// Patch Logic
+// =============================
+
+function patch(oldVNode, newVNode, el) {
+
+  if (oldVNode.type !== newVNode.type) {
+    const newEl = createElement(newVNode)
+    el.replaceWith(newEl)
+    return
+  }
+
+  newVNode._el = el
+
+  // Text node
+  if (newVNode.type === "text") {
+    if (oldVNode.value !== newVNode.value) {
+      el.nodeValue = newVNode.value
+    }
+    return
+  }
+
+  // List node
+  if (newVNode.type === "list") {
+    patchList(el, oldVNode.items, newVNode.items)
+    return
+  }
+
+  // Patch props
+  patchProps(el, oldVNode.props || {}, newVNode.props || {})
+
+  // Patch children (shallow index-based)
+  patchChildren(oldVNode, newVNode, el)
+}
+
+function patchProps(el, oldProps, newProps) {
+
+  // Update & add
+  for (const key in newProps) {
+    if (oldProps[key] !== newProps[key]) {
+      el.setAttribute(key, newProps[key])
+    }
+  }
+
+  // Remove
+  for (const key in oldProps) {
+    if (!(key in newProps)) {
+      el.removeAttribute(key)
+    }
+  }
+}
+
+function patchChildren(oldVNode, newVNode, parentEl) {
+
+  const oldChildren = oldVNode.children || []
+  const newChildren = newVNode.children || []
+
+  const commonLength = Math.min(oldChildren.length, newChildren.length)
+
+  // Patch existing
+  for (let i = 0; i < commonLength; i++) {
+    patch(oldChildren[i], newChildren[i], parentEl.childNodes[i])
+  }
+
+  // Add new
+  if (newChildren.length > oldChildren.length) {
+    for (let i = commonLength; i < newChildren.length; i++) {
+      mount(newChildren[i], parentEl)
+    }
+  }
+
+  // Remove extra
+  if (oldChildren.length > newChildren.length) {
+    for (let i = commonLength; i < oldChildren.length; i++) {
+      parentEl.childNodes[commonLength].remove()
+    }
+  }
+}
+
+// =============================
+// Keyed List Diff
+// =============================
+
+function patchList(container, oldItems = [], newItems = []) {
+
+  const oldMap = container._items || new Map()
+  const newMap = new Map()
+
+  newItems.forEach(item => {
+    if (oldMap.has(item.id)) {
+      const el = oldMap.get(item.id)
+      if (el.textContent !== item.label) {
+        el.textContent = item.label
+      }
+      newMap.set(item.id, el)
+    } else {
+      const el = document.createElement("div")
+      el.className = "list-item"
+      el.textContent = item.label
+      container.appendChild(el)
+      newMap.set(item.id, el)
+    }
+  })
+
+  oldMap.forEach((el, id) => {
+    if (!newMap.has(id)) {
+      el.remove()
+    }
+  })
+
+  container._items = newMap
+}
+
+// =============================
+// Editor Binding
+// =============================
+
+const input = document.getElementById("jsonInput")
+
+input.addEventListener("input", () => {
+  try {
+    const ast = JSON.parse(input.value)
+    scheduleRender(ast)
+  } catch (e) {
+    console.warn("Invalid JSON")
+  }
+})
+
+// Initial render
+scheduleRender(JSON.parse(input.value))
+
+</script>
+
+</body>
+</html>

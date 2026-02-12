@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Ultra Lean Renderer v2</title>
+<style>
+body {
+  margin: 0;
+  display: flex;
+  height: 100vh;
+  font-family: monospace;
+}
+#editor {
+  width: 50%;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+  box-sizing: border-box;
+}
+#preview {
+  width: 50%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+}
+.window {
+  background: #222;
+  color: #0f0;
+  padding: 10px;
+  cursor: pointer;
+}
+.list-item {
+  padding: 4px;
+  border-bottom: 1px solid #333;
+}
+</style>
+</head>
+<body>
+
+<div id="editor">
+<textarea id="jsonInput">
+{
+  "type": "div",
+  "props": {
+    "class": "window",
+    "click.console": "Window clicked!",
+    "dblclick.console": "Double clicked!"
+  },
+  "children": [
+    { "type": "text", "value": "Winamp Main (click me)" },
+    {
+      "type": "list",
+      "key": "playlist",
+      "items": [
+        { "id": 1, "label": "Track 01.mp3" },
+        { "id": 2, "label": "Track 02.mp3" },
+        { "id": 3, "label": "Track 03.mp3" }
+      ]
+    }
+  ]
+}
+</textarea>
+</div>
+
+<div id="preview"></div>
+
+<script>
+
+// =============================
+// Scheduler
+// =============================
+
+let scheduled = false
+let nextAST = null
+let oldVNode = null
+const container = document.getElementById("preview")
+
+function scheduleRender(ast) {
+  nextAST = ast
+  if (!scheduled) {
+    scheduled = true
+    queueMicrotask(() => {
+      scheduled = false
+      render(nextAST)
+    })
+  }
+}
+
+function render(newVNode) {
+  if (!oldVNode) {
+    mount(newVNode, container)
+  } else {
+    patch(oldVNode, newVNode, container.firstChild)
+  }
+  oldVNode = newVNode
+}
+
+// =============================
+// Mount
+// =============================
+
+function mount(vnode, parent) {
+  const el = createElement(vnode)
+  parent.appendChild(el)
+  vnode._el = el
+}
+
+function createElement(vnode) {
+
+  if (vnode.type === "text") {
+    const el = document.createTextNode(vnode.value)
+    vnode._el = el
+    return el
+  }
+
+  if (vnode.type === "list") {
+    const wrapper = document.createElement("div")
+    wrapper._items = new Map()
+    patchList(wrapper, [], vnode.items)
+    vnode._el = wrapper
+    return wrapper
+  }
+
+  const el = document.createElement(vnode.type)
+
+  patchProps(el, {}, vnode.props || {})
+
+  ;(vnode.children || []).forEach(child => {
+    mount(child, el)
+  })
+
+  vnode._el = el
+  return el
+}
+
+// =============================
+// Patch Core
+// =============================
+
+function patch(oldVNode, newVNode, el) {
+
+  if (oldVNode.type !== newVNode.type) {
+    const newEl = createElement(newVNode)
+    el.replaceWith(newEl)
+    return
+  }
+
+  newVNode._el = el
+
+  if (newVNode.type === "text") {
+    if (oldVNode.value !== newVNode.value) {
+      el.nodeValue = newVNode.value
+    }
+    return
+  }
+
+  if (newVNode.type === "list") {
+    patchList(el, oldVNode.items, newVNode.items)
+    return
+  }
+
+  patchProps(el, oldVNode.props || {}, newVNode.props || {})
+  patchChildren(oldVNode, newVNode, el)
+}
+
+// =============================
+// Props + Event System
+// =============================
+
+function patchProps(el, oldProps, newProps) {
+
+  // Add / Update
+  for (const key in newProps) {
+
+    if (key.includes(".console")) {
+      patchConsoleEvent(el, key, oldProps[key], newProps[key])
+      continue
+    }
+
+    if (oldProps[key] !== newProps[key]) {
+      el.setAttribute(key, newProps[key])
+    }
+  }
+
+  // Remove
+  for (const key in oldProps) {
+
+    if (!(key in newProps)) {
+
+      if (key.includes(".console")) {
+        removeConsoleEvent(el, key)
+      } else {
+        el.removeAttribute(key)
+      }
+    }
+  }
+}
+
+function patchConsoleEvent(el, key, oldVal, newVal) {
+
+  const eventType = key.split(".")[0]
+
+  if (oldVal === newVal) return
+
+  removeConsoleEvent(el, key)
+
+  const handler = () => console.log(newVal)
+
+  el.addEventListener(eventType, handler)
+
+  if (!el._events) el._events = {}
+  el._events[key] = handler
+}
+
+function removeConsoleEvent(el, key) {
+  if (el._events && el._events[key]) {
+    const eventType = key.split(".")[0]
+    el.removeEventListener(eventType, el._events[key])
+    delete el._events[key]
+  }
+}
+
+// =============================
+// Children Patch (index-based)
+// =============================
+
+function patchChildren(oldVNode, newVNode, parentEl) {
+
+  const oldChildren = oldVNode.children || []
+  const newChildren = newVNode.children || []
+
+  const common = Math.min(oldChildren.length, newChildren.length)
+
+  for (let i = 0; i < common; i++) {
+    patch(oldChildren[i], newChildren[i], parentEl.childNodes[i])
+  }
+
+  if (newChildren.length > oldChildren.length) {
+    for (let i = common; i < newChildren.length; i++) {
+      mount(newChildren[i], parentEl)
+    }
+  }
+
+  if (oldChildren.length > newChildren.length) {
+    for (let i = common; i < oldChildren.length; i++) {
+      parentEl.childNodes[common].remove()
+    }
+  }
+}
+
+// =============================
+// Keyed List with Reorder
+// =============================
+
+function patchList(container, oldItems = [], newItems = []) {
+
+  const oldMap = container._items || new Map()
+  const newMap = new Map()
+
+  newItems.forEach((item, index) => {
+
+    let el
+
+    if (oldMap.has(item.id)) {
+      el = oldMap.get(item.id)
+      if (el.textContent !== item.label) {
+        el.textContent = item.label
+      }
+    } else {
+      el = document.createElement("div")
+      el.className = "list-item"
+      el.textContent = item.label
+    }
+
+    newMap.set(item.id, el)
+
+    // Reorder if needed
+    const currentNode = container.childNodes[index]
+    if (currentNode !== el) {
+      container.insertBefore(el, currentNode || null)
+    }
+  })
+
+  // Remove missing
+  oldMap.forEach((el, id) => {
+    if (!newMap.has(id)) {
+      el.remove()
+    }
+  })
+
+  container._items = newMap
+}
+
+// =============================
+// Editor Binding
+// =============================
+
+const input = document.getElementById("jsonInput")
+
+input.addEventListener("input", () => {
+  try {
+    const ast = JSON.parse(input.value)
+    scheduleRender(ast)
+  } catch {}
+})
+
+scheduleRender(JSON.parse(input.value))
+
+</script>
+
+</body>
+</html>
