@@ -400,10 +400,10 @@ eq
         const vChildren = [];
         
         if (isCustom) {
-           if (props.text) vChildren.push({ type: 'span', props: {}, children: [props.text.join(' ')] });
-           if (props.time) vChildren.push({ type: 'span', props: { class: 'time' }, children: [props.time.join(' ')] });
+           if (props.text) vChildren.push({ type: 'span', props: {}, children: [{ type: '$text', val: props.text.join(' ') }] });
+           if (props.time) vChildren.push({ type: 'span', props: { class: 'time' }, children: [{ type: '$text', val: props.time.join(' ') }] });
         } else {
-           if (props.text) vChildren.push(props.text.join(' '));
+           if (props.text) vChildren.push({ type: '$text', val: props.text.join(' ') });
         }
 
         vChildren.push(...children);
@@ -456,7 +456,7 @@ eq
                 {
                   type: 'div',
                   props: { style: 'font-size: 10px; color: #666; margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase;' },
-                  children: [`CORE::${layoutName.toUpperCase()}`]
+                  children: [{ type: '$text', val: `CORE::${layoutName.toUpperCase()}` }]
                 },
                 ...children
               ]
@@ -475,24 +475,22 @@ eq
     function patch(n1, n2, container) {
       if (!n1 && !n2) return;
       if (!n2) { if (n1 && n1.el) n1.el.remove(); return; }
-      if (typeof n2 === "string") {
-        if (n1 !== n2) {
-          const newEl = document.createTextNode(n2);
-          if (n1 && n1.el) container.replaceChild(newEl, n1.el);
-          else container.appendChild(newEl);
-          n2 = { el: newEl };
-        } else {
-          n2 = n1; 
-        }
-        return;
-      }
+      
       if (!n1) { mount(n2, container); return; }
+      
       if (n1.type !== n2.type) {
         const newEl = createEl(n2);
         container.replaceChild(newEl, n1.el);
         return;
       }
+
       const el = (n2.el = n1.el);
+
+      if (n2.type === "$text") {
+        if (n1.val !== n2.val) el.nodeValue = n2.val;
+        return;
+      }
+
       patchProps(el, n1.props || {}, n2.props || {});
       patchChildren(n1, n2, el);
     }
@@ -503,9 +501,9 @@ eq
     }
 
     function createEl(vnode) {
-      if (typeof vnode === "string") {
-          const t = document.createTextNode(vnode);
-          vnode = { el: t };
+      if (vnode.type === "$text") {
+          const t = document.createTextNode(vnode.val);
+          vnode.el = t;
           return t;
       }
       const el = document.createElement(vnode.type);
