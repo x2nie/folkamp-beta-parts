@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Engine v2 - Conditional Rendering</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d12;
+      --panel: rgba(30, 30, 40, 0.6);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #00d2ff;
+      --text: #f0f0f0;
+      --glass: blur(16px);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Editor */
+    #sidebar {
+      width: 480px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: #000;
+      z-index: 10;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      border-bottom: 1px solid var(--border);
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #d1d1d1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 24px;
+      resize: none;
+      outline: none;
+      line-height: 1.6;
+    }
+
+    /* Desktop Workspace */
+    #workspace {
+      flex: 1;
+      position: relative;
+      background: 
+        radial-gradient(circle at 0% 0%, rgba(0, 210, 255, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(94, 92, 230, 0.05) 0%, transparent 50%),
+        #0d0d12;
+      padding: 40px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-gap: 32px;
+      align-content: start;
+      overflow-y: auto;
+    }
+
+    /* Window UI Component */
+    .window {
+      background: var(--panel);
+      backdrop-filter: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+
+    .window.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .window-header {
+      padding: 14px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .window-id {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 1px;
+    }
+
+    .window-content {
+      padding: 20px;
+      flex: 1;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #333;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .dot.close:hover { background: #ff5f56; }
+
+    /* Playlist UI */
+    .playlist-item {
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      border: 1px solid transparent;
+    }
+
+    .playlist-item:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: var(--border);
+    }
+
+    .time { color: var(--accent); font-weight: 600; }
+
+    button {
+      background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
+    }
+
+    button:active { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div class="panel-header">
+      <span>Antigravity Engine v2</span>
+      <span style="color:var(--accent)">Stable State</span>
+    </div>
+    <textarea id="jsonInput">
+{
+  "main": {
+    "visible": true,
+    "tree": {
+      "type": "div",
+      "children": [
+        { "type": "h2", "children": ["Winamp Core"] },
+        { "type": "p", "children": ["Dapatkan kejernihan audio maksimal di iterasi v2."] },
+        { 
+          "type": "button", 
+          "props": { "onclick": "toggleEQ" }, 
+          "children": ["Toggle Equalizer"] 
+        }
+      ]
+    }
+  },
+  "eq": {
+    "visible": false,
+    "tree": {
+      "type": "div",
+      "children": [
+        { "type": "h3", "children": ["Digital EQ"] },
+        { "type": "div", "children": ["Pre-amp: +4dB"] },
+        { "type": "div", "children": ["80Hz: +12dB"] },
+        { "type": "div", "children": ["16KHz: -2dB"] }
+      ]
+    }
+  },
+  "playlist": {
+    "visible": true,
+    "tree": {
+      "type": "list",
+      "items": [
+        { "id": 501, "label": "Lagu Kece.mp3", "time": "3:21" },
+        { "id": 502, "label": "Vibes Saja.mp3", "time": "4:45" },
+        { "id": 503, "label": "Malam Minggu.wav", "time": "2:10" }
+      ]
+    }
+  }
+}
+    </textarea>
+  </div>
+
+  <div id="workspace">
+    <div data-vroot="main"></div>
+    <div data-vroot="eq"></div>
+    <div data-vroot="playlist"></div>
+  </div>
+
+  <script>
+    // ==========================================
+    // Engine Logic (Antigravity v2)
+    // ==========================================
+
+    function patch(n1, n2, container, anchor = null) {
+      if (!n1 && !n2) return
+      
+      // Cleanup if target goes null
+      if (!n2) {
+        if (n1 && n1.el) n1.el.remove()
+        return
+      }
+
+      // 1. Text Node
+      if (typeof n2 === "string") {
+        if (n1 !== n2) {
+          const newEl = document.createTextNode(n2)
+          if (n1 && n1.el) container.replaceChild(newEl, n1.el)
+          else container.appendChild(newEl)
+          n2 = { el: newEl }
+        } else {
+          n2 = n1 // preserve
+        }
+        return
+      }
+
+      // 2. Initial Mount
+      if (!n1) {
+        mount(n2, container, anchor)
+        return
+      }
+
+      // 3. Different Type
+      if (n1.type !== n2.type) {
+        const newEl = createEl(n2)
+        container.replaceChild(newEl, n1.el)
+        return
+      }
+
+      // 4. Same Type - Update Props & Children
+      const el = (n2.el = n1.el)
+
+      if (n2.type === "list") {
+        patchList(el, n1.items, n2.items)
+        return
+      }
+
+      patchProps(el, n1.props || {}, n2.props || {})
+      patchChildren(n1, n2, el)
+    }
+
+    function mount(vnode, container, anchor) {
+      const el = createEl(vnode)
+      container.insertBefore(el, anchor)
+    }
+
+    function createEl(vnode) {
+      if (typeof vnode === "string") {
+        const el = document.createTextNode(vnode)
+        vnode = { el }
+        return el
+      }
+
+      if (vnode.type === "list") {
+        const wrapper = document.createElement("div")
+        wrapper._itemsMap = new Map()
+        patchList(wrapper, [], vnode.items)
+        vnode.el = wrapper
+        return wrapper
+      }
+
+      const el = document.createElement(vnode.type)
+      vnode.el = el
+
+      patchProps(el, {}, vnode.props || {})
+      
+      ;(vnode.children || []).forEach(child => mount(child, el))
+
+      return el
+    }
+
+    function patchProps(el, oldProps, newProps) {
+      for (const key in newProps) {
+        const o = oldProps[key], n = newProps[key]
+        if (o !== n) {
+          if (key.startsWith("on")) {
+            const ev = key.slice(2).toLowerCase()
+            const h = typeof n === 'function' ? n : window[n]
+            if (o) el.removeEventListener(ev, window[o] || o)
+            if (h) el.addEventListener(ev, h)
+          } else {
+            el.setAttribute(key, n)
+          }
+        }
+      }
+      for (const key in oldProps) {
+        if (!(key in newProps)) {
+          if (key.startsWith("on")) {
+            el.removeEventListener(key.slice(2).toLowerCase(), window[oldProps[key]] || oldProps[key])
+          } else {
+            el.removeAttribute(key)
+          }
+        }
+      }
+    }
+
+    function patchChildren(n1, n2, parentEl) {
+      const c1 = n1.children || [], c2 = n2.children || []
+      const len = Math.max(c1.length, c2.length)
+      for (let i = 0; i < len; i++) {
+        patch(c1[i], c2[i], parentEl)
+      }
+    }
+
+    function patchList(container, oldItems = [], newItems = []) {
+      const map = container._itemsMap || new Map()
+      const nextMap = new Map()
+
+      newItems.forEach((item, i) => {
+        let el = map.get(item.id)
+        if (!el) {
+          el = document.createElement("div")
+          el.className = "playlist-item"
+        }
+        el.innerHTML = `<span>${item.label}</span> <span class="time">${item.time}</span>`
+        nextMap.set(item.id, el)
+        
+        const cur = container.childNodes[i]
+        if (cur !== el) container.insertBefore(el, cur || null)
+      })
+
+      map.forEach((el, id) => {
+        if (!nextMap.has(id)) el.remove()
+      })
+      container._itemsMap = nextMap
+    }
+
+    // ==========================================
+    // Multi-Window Coordinator (v2)
+    // ==========================================
+
+    class WindowRenderer {
+      constructor(id) {
+        this.id = id
+        this.root = document.querySelector(`[data-vroot="${id}"]`)
+        this.prevTree = null
+        this.visible = false
+      }
+
+      sync(config) {
+        if (!this.root) return
+
+        // 1. Handle Visibility (The Core Improvement)
+        if (!config.visible) {
+          if (this.visible) {
+            this.root.innerHTML = "" // Clear DOM
+            this.prevTree = null
+            this.visible = false
+          }
+          return
+        }
+
+        // 2. Prepare Window Shell if just became visible
+        if (!this.visible) {
+          this.root.innerHTML = `
+            <div class="window" id="win-${this.id}">
+              <div class="window-header">
+                <span class="window-id">CORE::${this.id.toUpperCase()}</span>
+                <div class="controls">
+                  <div class="dot close" onclick="closeWindow('${this.id}')"></div>
+                </div>
+              </div>
+              <div class="window-content"></div>
+            </div>
+          `
+          this.visible = true
+          // Microtask animation
+          queueMicrotask(() => document.getElementById(`win-${this.id}`).classList.add('visible'))
+        }
+
+        // 3. Patch Content
+        const contentArea = this.root.querySelector('.window-content')
+        patch(this.prevTree, config.tree, contentArea)
+        this.prevTree = config.tree
+      }
+    }
+
+    const runners = {}
+    document.querySelectorAll('[data-vroot]').forEach(el => {
+      const id = el.getAttribute('data-vroot')
+      runners[id] = new WindowRenderer(id)
+    })
+
+    const input = document.getElementById("jsonInput")
+    
+    function refresh() {
+      try {
+        const state = JSON.parse(input.value)
+        Object.keys(runners).forEach(id => {
+          if (state[id]) runners[id].sync(state[id])
+        })
+      } catch(e) { }
+    }
+
+    // ==========================================
+    // App Actions
+    // ==========================================
+
+    window.toggleEQ = () => {
+      const state = JSON.parse(input.value)
+      state.eq.visible = !state.eq.visible
+      input.value = JSON.stringify(state, null, 2)
+      refresh()
+    }
+
+    window.closeWindow = (id) => {
+      const state = JSON.parse(input.value)
+      if (state[id]) {
+        state[id].visible = false
+        input.value = JSON.stringify(state, null, 2)
+        refresh()
+      }
+    }
+
+    input.addEventListener("input", refresh)
+    refresh()
+
+  </script>
+</body>
+</html>
