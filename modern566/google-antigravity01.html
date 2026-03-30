@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Engine v1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      --panel: rgba(255, 255, 255, 0.05);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #5e5ce6;
+      --text: #e0e0e0;
+      --glass: blur(10px);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Side Editor */
+    #sidebar {
+      width: 450px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: rgba(0,0,0,0.3);
+    }
+
+    .panel-header {
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--border);
+      color: #888;
+    }
+
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #9cdcfe;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 20px;
+      resize: none;
+      outline: none;
+      line-height: 1.5;
+    }
+
+    /* Workspace */
+    #workspace {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0c 100%);
+      padding: 40px;
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      align-content: flex-start;
+    }
+
+    /* Premium Window Styles */
+    .window {
+      background: var(--panel);
+      backdrop-filter: var(--glass);
+      -webkit-backdrop-filter: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      padding: 20px;
+      min-width: 280px;
+      transition: transform 0.2s;
+    }
+
+    .window:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .window-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .window-title::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    .list-item {
+      padding: 10px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+      margin-bottom: 6px;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      border: 1px solid transparent;
+      transition: 0.2s;
+    }
+
+    .list-item:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--border);
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: filter 0.2s;
+    }
+
+    button:hover {
+      filter: brightness(1.2);
+    }
+
+    .log { color: #888; font-size: 11px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div class="panel-header">JSON Definition (Antigravity v1)</div>
+    <textarea id="jsonInput">
+{
+  "mainWindow": {
+    "type": "div",
+    "props": { "class": "window" },
+    "children": [
+      { "type": "div", "props": { "class": "window-title" }, "children": ["ANTIGRAVITY PLAYER"] },
+      { "type": "p", "children": ["Now Playing: Digital Silence.mp3"] },
+      { "type": "button", "props": { "onclick": "toggleEQ" }, "children": ["Toggle Equalizer"] }
+    ]
+  },
+  "eqWindow": {
+    "type": "div",
+    "props": { "class": "window", "style": "border-left: 4px solid #5e5ce6" },
+    "children": [
+      { "type": "div", "props": { "class": "window-title" }, "children": ["EQUALIZER (EQ)"] },
+      { "type": "div", "children": ["Bass: +12dB"] },
+      { "type": "div", "children": ["Mid: -2dB"] },
+      { "type": "div", "children": ["Treble: +4dB"] }
+    ]
+  },
+  "playlistWindow": {
+    "type": "div",
+    "props": { "class": "window" },
+    "children": [
+      { "type": "div", "props": { "class": "window-title" }, "children": ["PLAYLIST"] },
+      {
+        "type": "list",
+        "items": [
+          { "id": 101, "label": "01. Opening.mp3", "time": "3:45" },
+          { "id": 102, "label": "02. The Void.mp3", "time": "4:12" },
+          { "id": 103, "label": "03. Resonance.mp3", "time": "2:30" }
+        ]
+      }
+    ]
+  }
+}
+    </textarea>
+  </div>
+
+  <div id="workspace">
+    <div data-vroot="mainWindow"></div>
+    <div data-vroot="eqWindow"></div>
+    <div data-vroot="playlistWindow"></div>
+  </div>
+
+  <script>
+    // ==========================================
+    // Antigravity Engine Core
+    // ==========================================
+
+    /**
+     * Patch VNode into the DOM
+     */
+    function patch(n1, n2, container, anchor = null) {
+      if (!n1 && !n2) return
+      
+      // Mount new
+      if (!n1) {
+        mount(n2, container, anchor)
+        return
+      }
+
+      // Remove old
+      if (!n2) {
+        if (n1.el) n1.el.remove()
+        return
+      }
+
+      // Text Node handling
+      if (typeof n2 === "string") {
+        if (n1 !== n2) {
+          const newEl = document.createTextNode(n2)
+          container.replaceChild(newEl, n1.el)
+          n2 = { el: newEl }
+        }
+        return
+      }
+
+      // Type mismatch: Replace full element
+      if (n1.type !== n2.type) {
+        const newEl = createEl(n2)
+        container.replaceChild(newEl, n1.el)
+        return
+      }
+
+      // Same type: Update props and children
+      const el = (n2.el = n1.el)
+      
+      // Custom List logic (Keyed)
+      if (n2.type === "list") {
+        patchList(el, n1.items, n2.items)
+        return
+      }
+
+      patchProps(el, n1.props || {}, n2.props || {})
+      patchChildren(n1, n2, el)
+    }
+
+    function mount(vnode, container, anchor) {
+      const el = createEl(vnode)
+      container.insertBefore(el, anchor)
+    }
+
+    function createEl(vnode) {
+      if (typeof vnode === "string") {
+        const el = document.createTextNode(vnode)
+        vnode = { el }
+        return el
+      }
+
+      if (vnode.type === "list") {
+        const wrapper = document.createElement("div")
+        wrapper._items = new Map()
+        patchList(wrapper, [], vnode.items)
+        vnode.el = wrapper
+        return wrapper
+      }
+
+      const el = document.createElement(vnode.type)
+      vnode.el = el
+
+      patchProps(el, {}, vnode.props || {})
+      
+      ;(vnode.children || []).forEach(child => {
+        mount(child, el)
+      })
+
+      return el
+    }
+
+    function patchProps(el, oldProps, newProps) {
+      // Set / Update
+      for (const key in newProps) {
+        const oldVal = oldProps[key]
+        const newVal = newProps[key]
+
+        if (oldVal !== newVal) {
+          if (key.startsWith("on")) {
+            const eventType = key.slice(2).toLowerCase()
+            // Support global functions for simplicity in this demo
+            const handler = typeof newVal === 'function' ? newVal : window[newVal]
+            if (oldVal) el.removeEventListener(eventType, window[oldVal] || oldVal)
+            if (handler) el.addEventListener(eventType, handler)
+          } else {
+            el.setAttribute(key, newVal)
+          }
+        }
+      }
+
+      // Remove
+      for (const key in oldProps) {
+        if (!(key in newProps)) {
+          if (key.startsWith("on")) {
+            const eventType = key.slice(2).toLowerCase()
+            el.removeEventListener(eventType, window[oldProps[key]] || oldProps[key])
+          } else {
+            el.removeAttribute(key)
+          }
+        }
+      }
+    }
+
+    function patchChildren(n1, n2, parentEl) {
+      const c1 = n1.children || []
+      const c2 = n2.children || []
+      const commonLen = Math.min(c1.length, c2.length)
+
+      for (let i = 0; i < commonLen; i++) {
+        patch(c1[i], c2[i], parentEl)
+      }
+
+      if (c2.length > c1.length) {
+        for (let i = commonLen; i < c2.length; i++) {
+          mount(c2[i], parentEl)
+        }
+      } else if (c1.length > c2.length) {
+        for (let i = commonLen; i < c1.length; i++) {
+          if (c1[i].el) c1[i].el.remove()
+        }
+      }
+    }
+
+    /**
+     * Keyed List Diffing (Advanced)
+     */
+    function patchList(container, oldItems = [], newItems = []) {
+      const oldMap = container._items || new Map()
+      const newMap = new Map()
+
+      newItems.forEach((item, index) => {
+        let el
+        if (oldMap.has(item.id)) {
+          el = oldMap.get(item.id)
+          // Minor update label/meta
+          const labelSpan = el.querySelector('.label')
+          if (labelSpan && labelSpan.textContent !== item.label) {
+            labelSpan.textContent = item.label
+          }
+        } else {
+          el = document.createElement("div")
+          el.className = "list-item"
+          el.innerHTML = `<span class="label">${item.label}</span><span class="log">${item.time || ''}</span>`
+        }
+
+        newMap.set(item.id, el)
+
+        // Positional Reorder
+        const currentAtPos = container.childNodes[index]
+        if (currentAtPos !== el) {
+          container.insertBefore(el, currentAtPos || null)
+        }
+      })
+
+      // Remove defunct
+      oldMap.forEach((el, id) => {
+        if (!newMap.has(id)) el.remove()
+      })
+
+      container._items = newMap
+    }
+
+    // ==========================================
+    // Multi-Renderer Coordination
+    // ==========================================
+
+    class Renderer {
+      constructor(rootId) {
+        this.root = document.querySelector(`[data-vroot="${rootId}"]`)
+        this.prevTree = null
+        this.scheduled = false
+      }
+
+      update(nextTree) {
+        if (!this.root) return
+        patch(this.prevTree, nextTree, this.root)
+        this.prevTree = nextTree
+      }
+    }
+
+    const renderers = {}
+    document.querySelectorAll('[data-vroot]').forEach(el => {
+      const key = el.getAttribute('data-vroot')
+      renderers[key] = new Renderer(key)
+    })
+
+    function syncAll() {
+      try {
+        const fullAST = JSON.parse(input.value)
+        Object.keys(renderers).forEach(key => {
+          renderers[key].update(fullAST[key])
+        })
+      } catch (e) {
+        // Silently wait for valid JSON
+      }
+    }
+
+    // ==========================================
+    // Application Logic & Bridge
+    // ==========================================
+
+    const input = document.getElementById("jsonInput")
+    input.addEventListener("input", syncAll)
+
+    // Bridge for Event Handlers in JSON
+    window.toggleEQ = () => {
+      const ast = JSON.parse(input.value)
+      if (ast.eqWindow) {
+        delete ast.eqWindow
+      } else {
+        ast.eqWindow = {
+          "type": "div",
+          "props": { "class": "window", "style": "border-left: 4px solid #5e5ce6" },
+          "children": [
+            { "type": "div", "props": { "class": "window-title" }, "children": ["EQUALIZER (EQ)"] },
+            { "type": "div", "children": ["Bass: +12dB"] }
+          ]
+        }
+      }
+      input.value = JSON.stringify(ast, null, 2)
+      syncAll()
+    }
+
+    // Initial Start
+    syncAll()
+  </script>
+</body>
+</html>
