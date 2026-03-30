@@ -1,0 +1,17 @@
+@window 
+main
+  " at 0 0
+  size 275 116
+
+  titlebar
+    text WebAmp
+    collapsible
+    draggable
+    height 14
+    background linear vertical
+      #444 0
+      #111 100
+
+  background linear vertical
+    #222 0
+    #000 100

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Playground v4 - Gradient & Color Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d12;
+      --panel: rgba(30, 30, 40, 0.6);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #00d2ff;
+      --text: #f0f0f0;
+      --glass: blur(16px);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Editor */
+    #editor-panel {
+      width: 480px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: #000;
+      z-index: 10;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      border-bottom: 1px solid var(--border);
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #444;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .status-dot.error { background: #ff5f56; box-shadow: 0 0 8px #ff5f56; }
+
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #d1d1d1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 24px;
+      resize: none;
+      outline: none;
+      line-height: 1.6;
+      tab-size: 4;
+    }
+
+    /* Preview Workspace */
+    #workspace {
+      flex: 1;
+      position: relative;
+      background: 
+        radial-gradient(circle at 0% 0%, rgba(0, 210, 255, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(94, 92, 230, 0.05) 0%, transparent 50%),
+        #0d0d12;
+      padding: 40px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-gap: 32px;
+      align-content: start;
+      overflow-y: auto;
+    }
+
+    /* Windows */
+    .window {
+      background: var(--panel);
+      backdrop-filter: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 20px;
+      position: relative; 
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Base Component Styles */
+    .component {
+      box-sizing: border-box;
+    }
+    .component.absolute {
+      position: absolute;
+    }
+
+    h2.component { margin-top: 0; font-size: 20px; font-weight: 600; color: var(--accent); }
+    h3.component { margin-top: 0; font-size: 16px; color: #fff; }
+    p.component { font-size: 14px; line-height: 1.5; color: #aaa; margin-bottom: 20px; }
+    div.component { font-size: 14px; margin-bottom: 8px; }
+
+    button.component {
+      background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
+      display: inline-block;
+    }
+    button.component:active { transform: scale(0.98); }
+
+    .playlist-item {
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      border: 1px solid transparent;
+    }
+    .playlist-item:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: var(--border);
+    }
+    .playlist-item .time { color: var(--accent); font-weight: 600; }
+
+    #error-overlay {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      left: 520px;
+      background: rgba(255, 77, 77, 0.15);
+      border: 1px solid rgba(255, 77, 77, 0.3);
+      backdrop-filter: blur(10px);
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: #ff5f56;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      display: none;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="editor-panel">
+    <div class="panel-header">
+      <div><span id="status-dot" class="status-dot active"></span> DSL INPUT (.fa)</div>
+      <div style="color:var(--accent)">ITERATION 04 (STYLES)</div>
+    </div>
+    <textarea id="dslInput" spellcheck="false">@layout
+main
+    visible true
+    background linear vertical
+        #1e1e28 0
+        #0d0d12 100
+    ---
+    WinampCore: h2
+        text Winamp Core
+        color #00d2ff
+    Description: p
+        text Dapatkan kejernihan audio maksimal di iterasi v4.
+        color #999999
+    EQToggle: button
+        onclick toggleEQ
+        text Toggle Equalizer
+
+@layout
+eq
+    visible false
+    background linear vertical
+        #2a1b3d 0
+        #110a17 100
+    ---
+    Title: h3
+        text Digital EQ
+        color #ff6b6b
+    P1: div
+        text Pre-amp: +4dB
+    E1: div
+        text 80Hz: +12dB
+    E2: div
+        text 16KHz: -2dB
+</textarea>
+  </div>
+
+  <div id="workspace">
+    <div data-vroot="main"></div>
+    <div data-vroot="eq"></div>
+    <div id="error-overlay"></div>
+  </div>
+
+  <script>
+    /**
+     * ===============================
+     * 1. LEXICAL PHASE
+     * ===============================
+     */
+    function lex(text) {
+      const lines = text.split(/\n/);
+      return lines.map((line, i) => {
+        const raw = line.replace(/".*$/,'').trimEnd();
+        if (!raw.trim()) return null;
+        
+        const indentMatch = line.match(/^\s*/);
+        const indent = indentMatch ? Math.floor(indentMatch[0].length / 4) : 0;
+        const content = raw.trim();
+
+        if (content.startsWith('@')) {
+          const parts = content.slice(1).split(/\s+/);
+          return { type: 'Decorator', name: parts[0], args: parts.slice(1), indent, line: i + 1 };
+        }
+
+        const tokens = content.split(/\s+/).map(v => isNaN(v) ? v : Number(v));
+        return { type: 'Statement', tokens, indent, line: i + 1 };
+      }).filter(Boolean);
+    }
+
+    /**
+     * ===============================
+     * 2. STRUCTURAL PHASE
+     * ===============================
+     */
+    function parseStructure(tokens) {
+      const root = { type: 'file', children: [] };
+      let activeDecorator = null;
+      let stack = [];
+
+      for (const t of tokens) {
+        if (t.type === 'Decorator') {
+          const node = { type: 'decorator', name: t.name, subject: null, args: t.args, children: [], line: t.line };
+          root.children.push(node);
+          activeDecorator = node;
+          stack = [{ indent: t.indent, node }];
+          continue;
+        }
+
+        if (!activeDecorator) continue;
+
+        if (activeDecorator.subject === null && t.indent === stack[0].indent) {
+          let toks = [...t.tokens];
+          activeDecorator.subject = toks.shift(); 
+          activeDecorator.args = toks;
+          continue;
+        }
+
+        while (stack.length > 1 && t.indent <= stack[stack.length - 1].indent) {
+          stack.pop();
+        }
+
+        const parent = stack[stack.length - 1].node;
+
+        let label = null, kind = 'Words', toks = [...t.tokens];
+        
+        if (typeof toks[0] === 'string' && toks[0].endsWith(':')) {
+          label = toks.shift().slice(0, -1);
+          kind = toks.shift() || 'element';
+        }
+
+        const node = { 
+          type: 'statement', 
+          kind, 
+          label, 
+          tokens: toks, 
+          children: [], 
+          line: t.line, 
+          isSeparator: toks[0] === '---' 
+        };
+        parent.children.push(node);
+        stack.push({ indent: t.indent, node });
+      }
+      return root;
+    }
+
+    /**
+     * ===============================
+     * 3. THE BRIDGE (AST -> vDOM)
+     * ===============================
+     */
+    function mapASTToVDOM(ast) {
+      const vroots = {}; 
+      
+      const processNode = (node) => {
+        const props = {};
+        const children = [];
+        let inChildren = false;
+
+        (node.children || []).forEach(child => {
+          if (child.isSeparator) { 
+            inChildren = true; 
+            return; 
+          }
+
+          if (!inChildren && child.type === 'statement') {
+            const key = child.kind === 'Words' ? child.tokens[0] : child.kind;
+            const values = child.kind === 'Words' ? child.tokens.slice(1) : child.tokens;
+            
+            // Check if this property has nested children (e.g. background gradient stops)
+            if (child.children && child.children.length > 0) {
+                props[key] = {
+                    values: values,
+                    children: child.children.map(c => c.tokens) // Just extract the tokens for stops
+                };
+            } else {
+                props[key] = values;
+            }
+          } else {
+            children.push(mapElement(child));
+          }
+        });
+        return { props, children };
+      };
+
+      const mapElement = (node) => {
+        if (node.type === 'decorator') return null;
+        const { props, children } = processNode(node);
+        const style = {};
+        
+        let hasAbsolute = false;
+        if (props.at) {
+          hasAbsolute = true;
+          const [x, y] = props.at;
+          if (typeof x === 'number') x >= 0 ? style.left = x + 'px' : style.right = Math.abs(x) + 'px';
+          if (typeof y === 'number') y >= 0 ? style.top = y + 'px' : style.bottom = Math.abs(y) + 'px';
+        }
+        if (props.size) {
+          const [w, h] = props.size;
+          if (w) style.width = w + 'px';
+          if (h) style.height = h + 'px';
+        }
+        if (props.anchor === 'right') style.left = 'auto';
+
+        // Custom styling maps
+        if (props.color) {
+            style.color = props.color.join(' ');
+        }
+        if (props.background) {
+            let bg = props.background;
+            if (bg.values && bg.values[0] === 'linear') {
+                let direction = bg.values[1] === 'vertical' ? 'to bottom' : (bg.values[1] === 'horizontal' ? 'to right' : bg.values[1]);
+                let stops = (bg.children || []).map(stop => `${stop[0]} ${stop[1]}%`).join(', ');
+                style.background = `linear-gradient(${direction}, ${stops})`;
+            } else {
+                style.background = (bg.values || bg).join(' ');
+            }
+            style.backgroundSize = 'cover';
+        }
+
+        let tag = node.kind || 'div';
+        if (tag === 'Words') tag = 'div'; 
+        
+        const isCustom = tag === 'playlist-item';
+        const vnodeType = isCustom ? 'div' : tag;
+        
+        const classes = ['component'];
+        if (isCustom) classes.push('playlist-item');
+        else classes.push(`comp-${tag}`);
+        
+        if (hasAbsolute) classes.push('absolute');
+
+        const vnodeProps = {
+          class: classes.join(' '),
+          title: props.tip ? props.tip.join(' ') : (node.label || tag)
+        };
+
+        if (Object.keys(style).length > 0) {
+          vnodeProps.style = Object.entries(style).map(([k, v]) => `${k}:${v}`).join(';');
+        }
+        
+        if (props.onclick) {
+          vnodeProps.onclick = props.onclick[0]; 
+        }
+
+        const vChildren = [];
+        
+        if (isCustom) {
+           if (props.text) vChildren.push({ type: 'span', props: {}, children: [props.text.join(' ')] });
+           if (props.time) vChildren.push({ type: 'span', props: { class: 'time' }, children: [props.time.join(' ')] });
+        } else {
+           if (props.text) vChildren.push(props.text.join(' '));
+        }
+
+        vChildren.push(...children);
+
+        return {
+          type: vnodeType,
+          props: vnodeProps,
+          children: vChildren
+        };
+      };
+
+      ast.children.forEach(block => {
+        if (block.type === 'decorator' && block.name === 'layout') {
+          const layoutName = block.subject;
+          if (!layoutName) return;
+
+          const { props, children } = processNode(block);
+          
+          const isVisible = props.visible ? (props.visible[0] !== 'false' && props.visible[0] !== false) : true;
+          
+          let windowStyle = "";
+          if (props.size) {
+            const [w, h] = props.size;
+            if (w) windowStyle += `width: ${w}px; `;
+            if (h) windowStyle += `height: ${h}px; `;
+          }
+
+          // Attach layout-level styles like background
+          if (props.background) {
+            let bg = props.background;
+            if (bg.values && bg.values[0] === 'linear') {
+                let direction = bg.values[1] === 'vertical' ? 'to bottom' : (bg.values[1] === 'horizontal' ? 'to right' : bg.values[1]);
+                let stops = (bg.children || []).map(stop => `${stop[0]} ${stop[1]}%`).join(', ');
+                windowStyle += `background: linear-gradient(${direction}, ${stops}); `;
+            } else {
+                windowStyle += `background: ${(bg.values || bg).join(' ')}; `;
+            }
+          }
+
+          vroots[layoutName] = {
+            visible: isVisible,
+            tree: {
+              type: 'div',
+              props: { 
+                class: 'window', 
+                id: `win-${layoutName}`,
+                style: windowStyle 
+              },
+              children: [
+                {
+                  type: 'div',
+                  props: { style: 'font-size: 10px; color: #666; margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase;' },
+                  children: [`CORE::${layoutName.toUpperCase()}`]
+                },
+                ...children
+              ]
+            }
+          };
+        }
+      });
+      return vroots;
+    }
+
+    /**
+     * ===============================
+     * 4. RENDERER ENGINE (v2)
+     * ===============================
+     */
+    function patch(n1, n2, container) {
+      if (!n1 && !n2) return;
+      if (!n2) { if (n1 && n1.el) n1.el.remove(); return; }
+      if (typeof n2 === "string") {
+        if (n1 !== n2) {
+          const newEl = document.createTextNode(n2);
+          if (n1 && n1.el) container.replaceChild(newEl, n1.el);
+          else container.appendChild(newEl);
+          n2 = { el: newEl };
+        } else {
+          n2 = n1; 
+        }
+        return;
+      }
+      if (!n1) { mount(n2, container); return; }
+      if (n1.type !== n2.type) {
+        const newEl = createEl(n2);
+        container.replaceChild(newEl, n1.el);
+        return;
+      }
+      const el = (n2.el = n1.el);
+      patchProps(el, n1.props || {}, n2.props || {});
+      patchChildren(n1, n2, el);
+    }
+
+    function mount(vnode, container) {
+      const el = createEl(vnode);
+      container.appendChild(el);
+    }
+
+    function createEl(vnode) {
+      if (typeof vnode === "string") {
+          const t = document.createTextNode(vnode);
+          vnode = { el: t };
+          return t;
+      }
+      const el = document.createElement(vnode.type);
+      vnode.el = el;
+      patchProps(el, {}, vnode.props || {});
+      (vnode.children || []).forEach(child => mount(child, el));
+      return el;
+    }
+
+    function patchProps(el, oldProps, newProps) {
+      for (const key in newProps) {
+        if (oldProps[key] !== newProps[key]) {
+          if (key.startsWith('on')) {
+              const ev = key.toLowerCase().slice(2);
+              if (oldProps[key]) el.removeEventListener(ev, window[oldProps[key]] || oldProps[key]);
+              const handler = typeof newProps[key] === 'function' ? newProps[key] : window[newProps[key]];
+              if (handler) el.addEventListener(ev, handler);
+          } else {
+              el.setAttribute(key, newProps[key]);
+          }
+        }
+      }
+      for (const key in oldProps) {
+        if (!(key in newProps)) {
+          if (key.startsWith('on')) {
+            const ev = key.toLowerCase().slice(2);
+            el.removeEventListener(ev, window[oldProps[key]] || oldProps[key]);
+          } else {
+            el.removeAttribute(key);
+          }
+        }
+      }
+    }
+
+    function patchChildren(n1, n2, parentEl) {
+      const c1 = n1.children || [], c2 = n2.children || [];
+      const len = Math.max(c1.length, c2.length);
+      for (let i = 0; i < len; i++) patch(c1[i], c2[i], parentEl);
+    }
+
+    class WindowRenderer {
+      constructor(id) {
+        this.id = id;
+        this.root = document.querySelector(`[data-vroot="${id}"]`);
+        this.prevTree = null;
+        this.visible = false;
+      }
+      sync(config) {
+        if (!this.root || !config) return;
+        
+        if (!config.visible) {
+          if (this.visible) {
+            this.root.innerHTML = "";
+            this.prevTree = null;
+            this.visible = false;
+          }
+          return;
+        }
+
+        if (!this.visible) {
+           this.visible = true;
+           this.root.innerHTML = "";
+        }
+        
+        patch(this.prevTree, config.tree, this.root);
+        this.prevTree = config.tree;
+      }
+    }
+
+    /**
+     * ===============================
+     * RUNTIME
+     * ===============================
+     */
+    const input = document.getElementById('dslInput');
+    const statusDot = document.getElementById('status-dot');
+    const errorOverlay = document.getElementById('error-overlay');
+    
+    const runners = {};
+    document.querySelectorAll('[data-vroot]').forEach(el => {
+      const id = el.getAttribute('data-vroot');
+      runners[id] = new WindowRenderer(id);
+    });
+
+    let appState = {
+       eqVisible: false
+    };
+
+    function processDSL() {
+      try {
+        const text = input.value;
+        const tokens = lex(text);
+        const ast = parseStructure(tokens);
+        const vroots = mapASTToVDOM(ast);
+        
+        statusDot.className = 'status-dot active';
+        errorOverlay.style.display = 'none';
+
+        if (vroots.eq) vroots.eq.visible = appState.eqVisible;
+
+        Object.keys(runners).forEach(id => {
+          if (vroots[id]) runners[id].sync(vroots[id]);
+        });
+      } catch (e) {
+        console.error(e);
+        statusDot.className = 'status-dot error';
+        errorOverlay.textContent = `Error: ${e.message}`;
+        errorOverlay.style.display = 'block';
+      }
+    }
+
+    function refresh() {
+       processDSL();
+    }
+
+    window.toggleEQ = () => {
+       appState.eqVisible = !appState.eqVisible;
+       const currText = input.value;
+       const nextText = currText.replace(/(@layout\s*\n\s*eq\s*\n\s*visible\s+)(true|false)/, `$1${appState.eqVisible}`);
+       input.value = nextText;
+       refresh();
+    };
+
+    input.addEventListener('input', refresh);
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart, end = this.selectionEnd;
+        this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = start + 4;
+        refresh();
+      }
+    });
+
+    appState.eqVisible = input.value.includes('eq\n    visible true');
+    refresh();
+  </script>
+</body>
+</html>

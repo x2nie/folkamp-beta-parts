@@ -70,7 +70,7 @@ textarea {
 <script>
 
 // =============================
-// Scheduler
+// Scheduler (Microtask Batch)
 // =============================
 
 let scheduled = false
@@ -137,7 +137,7 @@ function createElement(vnode) {
 }
 
 // =============================
-// Patch Core
+// Patch Core Logic
 // =============================
 
 function patch(oldVNode, newVNode, el) {
@@ -150,6 +150,7 @@ function patch(oldVNode, newVNode, el) {
 
   newVNode._el = el
 
+  // Text node
   if (newVNode.type === "text") {
     if (oldVNode.value !== newVNode.value) {
       el.nodeValue = newVNode.value
@@ -157,12 +158,16 @@ function patch(oldVNode, newVNode, el) {
     return
   }
 
+  // List node
   if (newVNode.type === "list") {
     patchList(el, oldVNode.items, newVNode.items)
     return
   }
 
+  // Patch props
   patchProps(el, oldVNode.props || {}, newVNode.props || {})
+
+  // Patch children (shallow index-based)
   patchChildren(oldVNode, newVNode, el)
 }
 
@@ -232,27 +237,30 @@ function patchChildren(oldVNode, newVNode, parentEl) {
   const oldChildren = oldVNode.children || []
   const newChildren = newVNode.children || []
 
-  const common = Math.min(oldChildren.length, newChildren.length)
+  const commonLength = Math.min(oldChildren.length, newChildren.length)
 
-  for (let i = 0; i < common; i++) {
+  // Patch existing
+  for (let i = 0; i < commonLength; i++) {
     patch(oldChildren[i], newChildren[i], parentEl.childNodes[i])
   }
 
+  // Add new
   if (newChildren.length > oldChildren.length) {
-    for (let i = common; i < newChildren.length; i++) {
+    for (let i = commonLength; i < newChildren.length; i++) {
       mount(newChildren[i], parentEl)
     }
   }
 
+  // Remove extra
   if (oldChildren.length > newChildren.length) {
-    for (let i = common; i < oldChildren.length; i++) {
-      parentEl.childNodes[common].remove()
+    for (let i = commonLength; i < oldChildren.length; i++) {
+      parentEl.childNodes[commonLength].remove()
     }
   }
 }
 
 // =============================
-// Keyed List with Reorder
+// Keyed List Diff with Reorder
 // =============================
 
 function patchList(container, oldItems = [], newItems = []) {
@@ -304,9 +312,12 @@ input.addEventListener("input", () => {
   try {
     const ast = JSON.parse(input.value)
     scheduleRender(ast)
-  } catch {}
+  } catch (e) {
+    console.warn("Invalid JSON")
+  }
 })
 
+// Initial render
 scheduleRender(JSON.parse(input.value))
 
 </script>
