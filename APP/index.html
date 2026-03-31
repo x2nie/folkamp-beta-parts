@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DSL Parser Playground</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #ececec;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .editor-window {
+      height: 80vh;
+      border: 1px solid #444;
+      border-radius: 4px;
+      border-top-left-radius: 0;
+    }
+
+    .nav-tabs .nav-link {
+      color: #aaa;
+      border-bottom: none;
+      cursor: pointer;
+    }
+
+    .nav-tabs .nav-link.active {
+      background-color: #1a1a1a;
+      color: #0d6efd;
+      border-color: #444 #444 #1a1a1a;
+    }
+  </style>
+</head>
+
+<body class="p-4">
+  <div id="main" class="container-fluid">
+    <h2 class="mb-4 text-primary">FulkAmp DSL Parser (5 Stages)</h2>
+
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="lexical-tab" data-bs-toggle="tab" data-bs-target="#lexical" type="button"
+          role="tab">1. Lexical</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="structural-tab" data-bs-toggle="tab" data-bs-target="#structural" type="button"
+          role="tab">2. Structural</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="declarative-tab" data-bs-toggle="tab" data-bs-target="#declarative" type="button"
+          role="tab">3. Declarative</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="semantic-tab" data-bs-toggle="tab" data-bs-target="#semantic" type="button"
+          role="tab">4 & 5. Semantic Runtime</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="myTabContent">
+      <div class="tab-pane fade show active" id="lexical" role="tabpanel">
+        <div id="editor1" class="editor-window"></div>
+      </div>
+      <div class="tab-pane fade" id="structural" role="tabpanel">
+        <div id="editor2" class="editor-window"></div>
+      </div>
+      <div class="tab-pane fade" id="declarative" role="tabpanel">
+        <div id="editor3" class="editor-window"></div>
+      </div>
+      <div class="tab-pane fade" id="semantic" role="tabpanel">
+        <div id="editor4" class="editor-window"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Ace Editor -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js"></script>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

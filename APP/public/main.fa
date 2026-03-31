@@ -1,0 +1,14 @@
+@include sys "foo bar!"
+@include
+    common.fa
+    assets
+
+@type
+font.bitmap
+    size int int
+    ch int int
+    spacing int int
+
+@font.bitmap
+player/songtickerfont.png size 320 66
+    player.songticker.font ch 10 22 spacing -1 0
