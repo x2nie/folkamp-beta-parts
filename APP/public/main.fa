@@ -1,14 +1,12 @@
-@include sys "foo bar!"
-@include
-    common.fa
-    assets
+@skin
+MMD version 2.2
+    comment METRIX METAL DREAM - The legend returns
+    author  x2nie, google-antigravity
+    email   x2nie@yahoo.com
+    homepage http://www.x2nie.example.com
 
-@type
-font.bitmap
-    size int int
-    ch int int
-    spacing int int
 
-@font.bitmap
-player/songtickerfont.png size 320 66
-    player.songticker.font ch 10 22 spacing -1 0
+
+
+@include 
+    player

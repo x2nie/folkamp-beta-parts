@@ -1,0 +1,33 @@
+@layout
+main
+    visible true
+    background linear vertical
+        #1e1e28 0
+        #0d0d12 100
+    ---
+    WinampCore: h2
+        text Winamp Coress
+        color #00d2ff
+    Description: p
+        text Dapatkan kejernihan audio maksimal di iterasi v4.
+        color #999999
+    EQToggle: button
+        onclick toggleEQ
+        text Toggle Equalizer
+
+@layout
+eq
+    visible false
+    background linear vertical
+        #2a1b3d 0
+        #110a17 100
+    ---
+    Title: h3
+        text Digital EQ
+        color #ff6b6b
+    P1: div
+        text Pre-amp: +4dB
+    E1: div
+        text 80Hz: +12dB
+    E2: div
+        text 16KHz: -2dB
