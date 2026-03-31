@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DSL → AST TreeBuilder</title>
+  <style>
+    body { font-family: monospace; display: grid; grid-template-columns: 1fr 1fr; height: 100vh; margin: 0; }
+    textarea { padding: 12px; border: none; border-right: 1px solid #ccc; resize: none; font-size: 14px; outline: none; }
+    pre { margin: 0; padding: 12px; background: #f7f7f7; overflow: auto; }
+    .header { grid-column: 1 / -1; padding: 6px 12px; background: #222; color: #fff; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="header">DSL → AST (TreeBuilder)</div>
+  <textarea id="input">
+@layout
+normal
+    at 0 0
+    size 280 354
+    ---
+    Minimize: button at -41 4 anchor right
+        panel at 1 1 size 5 5
+
+mini at 10 30 size 280 354
+    ---
+    panel at 2 6 size 10 20
+  </textarea>
+  <pre id="output"></pre>
+
+<script>
+function normalizeIndent(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const out = [];
+  for (const raw of lines) {
+    if (!raw.trim()) continue;
+    const m = raw.match(/^(\s*)(.*)$/);
+    const level = Math.floor(m[1].replace(/\t/g, '    ').length / 4);
+    out.push({ indent: level, text: m[2].trim() });
+  }
+  return out;
+}
+
+function tokenize(line) {
+  if (line === '---' || line === '----') return { kind: 'separator' };
+  if (line.startsWith('@')) return { kind: 'decorator', name: line.slice(1) };
+
+  const tokens = line.split(/\s+/).map(v => {
+    if (/^-?\d+$/.test(v)) return Number(v);
+    return v;
+  });
+  return { kind: 'words', values: tokens };
+}
+
+function buildAST(lines) {
+  const root = { type: 'file', children: [] };
+  let currentDecorator = null;
+  const stack = [];
+
+  let phase = 'props';
+
+  function currentParent(indent) {
+    while (stack.length && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+    return stack.length ? stack[stack.length - 1].node : null;
+  }
+
+  for (const { indent, text } of lines) {
+    const stmt = tokenize(text);
+
+    if (stmt.kind === 'decorator') {
+      currentDecorator = stmt.name;
+      continue;
+    }
+
+    if (stmt.kind === 'separator') {
+      phase = 'children';
+      continue;
+    }
+
+    if (stmt.kind === 'words') {
+      const parent = currentParent(indent);
+
+      if (indent === 0) {
+        const [name, ...rest] = stmt.values;
+        const node = {
+          type: currentDecorator,
+          name: name,
+          props: parseProps(rest),
+          children: []
+        };
+        root.children.push(node);
+        stack.push({ indent, node });
+        phase = 'props';
+      } else {
+        if (phase === 'props') {
+          const node = stack[stack.length - 1].node;
+          Object.assign(node.props, parseProps(stmt.values));
+        } else {
+          const [first, ...rest] = stmt.values;
+          let label = null, type = first;
+          if (typeof first === 'string' && first.endsWith(':')) {
+            label = first.slice(0, -1);
+            type = rest.shift();
+          }
+          const node = {
+            type,
+            name: label,
+            props: parseProps(rest),
+            children: []
+          };
+          parent.children.push(node);
+          stack.push({ indent, node });
+          phase = 'props';
+        }
+      }
+    }
+  }
+  return root;
+}
+
+function parseProps(tokens) {
+  const props = {};
+  for (let i = 0; i < tokens.length; ) {
+    const key = tokens[i++];
+    const values = [];
+    while (i < tokens.length && typeof tokens[i] !== 'string') {
+      values.push(tokens[i++]);
+    }
+    if (values.length === 1) props[key] = values[0];
+    else if (values.length > 1) props[key] = values;
+    else props[key] = true;
+  }
+  return props;
+}
+
+function run() {
+  const input = document.getElementById('input').value;
+  const lines = normalizeIndent(input);
+  const ast = buildAST(lines);
+  document.getElementById('output').textContent = JSON.stringify(ast, null, 2);
+}
+
+input.addEventListener('input', run);
+run();
+</script>
+</body>
+</html>

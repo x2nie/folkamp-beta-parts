@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DSL Parser Playground – 5 Phases</title>
+  <style>
+    body { font-family: monospace; display: flex; gap: 12px; }
+    textarea { width: 30%; height: 90vh; }
+    pre { width: 40%; height: 90vh; overflow: auto; background: #111; color: #0f0; padding: 8px; }
+  </style>
+</head>
+<body>
+
+<textarea id="input">@type
+font.bitmap
+    size int int
+    ch int int
+    spacing int int
+
+@font.bitmap
+player/songtickerfont.png size 320 66
+    player.songticker.font ch 10 22 spacing -1 0
+</textarea>
+
+<pre id="output"></pre>
+
+<script type="module">
+// ===============================
+// 1. LEXICAL PHASE
+// ===============================
+export function lex(text) {
+  const lines = text.split(/\n/);
+  return lines.map((line, i) => {
+    if (!line.trim()) return null;
+    const indent = line.match(/^\s*/)[0].length / 4;
+    const raw = line.trim();
+
+    if (raw.startsWith('@')) {
+      const parts = raw.slice(1).split(/\s+/);
+      return { phase: 'lex', kind: 'Decorator', name: parts[0], args: parts.slice(1), indent, line: i + 1 };
+    }
+
+    const tokens = raw.split(/\s+/).map(v => isNaN(v) ? v : Number(v));
+    return { phase: 'lex', kind: 'Words', tokens, indent, line: i + 1 };
+  }).filter(Boolean);
+}
+
+// ===============================
+// 2. STRUCTURAL PHASE (REVISED)
+// ===============================
+export function structure(tokens) {
+  const root = { type: 'file', children: [] };
+
+  let i = 0;
+  while (i < tokens.length) {
+    const tok = tokens[i];
+
+    // handle @type block
+    if (tok.kind === 'Decorator' && tok.name === 'type') {
+      const subjectTok = tokens[i + 1];
+      const node = {
+        type: 'type',
+        subject: subjectTok.tokens[0],
+        children: []
+      };
+
+      i += 2;
+      while (i < tokens.length && tokens[i].indent > 0) {
+        const child = tokens[i];
+        node.children.push({
+          kind: child.kind,
+          tokens: child.tokens
+        });
+        i++;
+      }
+
+      root.children.push(node);
+      continue;
+    }
+
+    i++;
+  }
+
+  return root;
+}
+
+// ===============================
+// 3. DECLARATIVE PHASE
+// ===============================
+export function declarative(node) {
+  if (node.kind === 'Words') {
+    return {
+      kind: 'Declaration',
+      name: node.tokens[0],
+      tokens: node.tokens.slice(1)
+    };
+  }
+
+  if (node.children) {
+    node.decls = [];
+    node.children = node.children.map(c => {
+      if (c.kind === 'Words') {
+        const d = declarative(c);
+        node.decls.push(d);
+        return null;
+      }
+      return declarative(c);
+    }).filter(Boolean);
+  }
+  return node;
+}
+
+// ===============================
+// 4. SEMANTIC PASS 1 – COLLECT TYPES
+// ===============================
+export function collectTypes(ast) {
+  const registry = {};
+
+  for (const node of ast.children) {
+    if (node.type === 'type') {
+      registry[node.name] = node.decls;
+    }
+  }
+  return registry;
+}
+
+// ===============================
+// 5. SEMANTIC PASS 2 – RESOLVE RUNTIME
+// ===============================
+export function resolve(ast, registry) {
+  for (const node of ast.children) {
+    if (node.type !== 'type') {
+      node.schema = registry[node.type] || null;
+    }
+  }
+  return ast;
+}
+
+// ===============================
+// RUN PIPELINE
+// ===============================
+//import { lex, structure, declarative, collectTypes, resolve } from './';
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+
+function clone(o){
+    let s = JSON.stringify(o)
+    return JSON.parse(s)
+}
+
+function run() {
+  const t1 = lex(input.value);
+  const t2 = structure(t1);
+//   const t3 = declarative( clone(t2) );
+//   const registry = collectTypes(t3);
+//   const t4 = resolve(t3, registry);
+
+  output.textContent = JSON.stringify({ 
+    tokens:     clone(t1), 
+    'structure':  clone(t2), 
+    // ast:        clone(t4), 
+    // registry 
+    }, null, 2);
+}
+
+input.addEventListener('input', run);
+run();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DSL Parser Playground – 5 Phases</title>
+  <style>
+    body { font-family: monospace; display: flex; gap: 12px; }
+    textarea { width: 50%; height: 90vh; }
+    pre { width: 50%; height: 90vh; overflow: auto; background: #111; color: #0f0; padding: 8px; }
+  </style>
+</head>
+<body>
+
+<textarea id="input">@include sys "foo bar!"
+@include
+    common.fa
+    assets
+
+@type
+font.bitmap
+    size int int
+    ch int int
+    spacing int int
+
+@font.bitmap
+player/songtickerfont.png size 320 66
+    player.songticker.font ch 10 22 spacing -1 0
+</textarea>
+
+<pre id="output"></pre>
+
+<script type="module">
+// ===============================
+// 1. LEXICAL PHASE
+// ===============================
+export function lex(text) {
+  const lines = text.split(/\n/);
+  return lines.map((line, i) => {
+    if (!line.trim()) return null;
+    line = line.replace(/".*$/,'')
+    const indent = line.match(/^\s*/)[0].length / 4;
+    const raw = line.trim();
+
+    if (raw.startsWith('@')) {
+      const parts = raw.slice(1).split(/\s+/);
+      return { phase: 'lex', kind: 'Decorator', name: parts[0], args: parts.slice(1), indent, line: i + 1 };
+    }
+
+    const tokens = raw.split(/\s+/).map(v => isNaN(v) ? v : Number(v));
+    return { phase: 'lex', kind: 'Words', tokens, indent, line: i + 1 };
+  }).filter(Boolean);
+}
+
+// ===============================
+// 2. STRUCTURAL PHASE (REVISED)
+// ===============================
+export function structure(tokens) {
+    const root = { type: 'file', children: [] };
+    let activeDecorator = null;
+    let stack = [];
+
+
+    for (const t of tokens) {
+        // ---- Decorator opens a new block ----
+        if (t.kind === 'Decorator') {
+            const node = {
+                type: t.name,
+                subject: null,
+                args: t.name=='include'? t.args : [],
+                children: [],
+            };
+            root.children.push(node);
+            activeDecorator = node;
+            stack = [{ indent: t.indent, node }];
+            continue;
+        }
+
+
+        if (!activeDecorator) continue;
+
+        // ---- First include line = subject ----
+        if (activeDecorator.type === 'include' && t.indent === 1) {
+            activeDecorator.args.push(...(t.tokens));
+            continue;
+        }
+
+        // ---- First non-decorator line = subject ----
+        if (activeDecorator.subject === null && t.indent === stack[0].indent) {
+            // activeDecorator.subject = t.tokens.join(' ');
+            activeDecorator.subject = t.tokens.shift();
+            // const node = { kind: 'Words', tokens: t.tokens, children: [] };
+            // activeDecorator.children.push(node)
+            activeDecorator.args = t.tokens;
+            continue;
+        }
+
+
+        // ---- Normal nested content ----
+        while (stack.length && t.indent <= stack[stack.length - 1].indent) {
+            stack.pop();
+        }
+
+
+        const parent = stack.length ? stack[stack.length - 1].node : activeDecorator;
+        const node = { kind: 'Words', tokens: t.tokens, children: [] };
+        parent.children.push(node);
+        stack.push({ indent: t.indent, node });
+    }
+
+
+    return root;
+}
+// ===============================
+// 3. DECLARATIVE PHASE
+// ===============================
+export function declarative(tree) {
+      const registry = {};
+      const output = { type: "file", children: [], registry };
+
+      for (const node of tree.children) {
+
+        if (node.type === "type") {
+          const schema = {};
+          for (const w of node.children) {
+            const [key, ...types] = w.tokens;
+            schema[key] = types;
+          }
+          registry[node.subject] = schema;
+        }
+
+        else if (node.type === "include") {
+          output.children.push({
+            type: node.type,
+            children: node.args
+          });
+        }
+        // if (node.type !== "type") {
+        else {
+          const schema = registry[node.type];
+          const parts = node.subject.split(/\s+/);
+          const name = parts[0];
+
+          const props = {};
+          for (let i = 1; i < parts.length;) {
+            const key = parts[i++];
+            const arity = schema[key].length;
+            props[key] = parts.slice(i, i + arity).map(Number);
+            i += arity;
+          }
+
+          const children = node.children.map(w => {
+            const toks = w.tokens;
+            const target = toks[0];
+            const p = {};
+            for (let i = 1; i < toks.length;) {
+              const key = toks[i++];
+              const arity = schema[key].length;
+              p[key] = toks.slice(i, i + arity);
+              i += arity;
+            }
+            return {
+              type: node.type + ".child",
+              target,
+              props: p,
+              children: []
+            };
+          });
+
+          output.children.push({
+            type: node.type,
+            name,
+            props,
+            children
+          });
+        }
+      }
+
+      return output;
+    }
+// ===============================
+// 4. SEMANTIC PASS 1 – COLLECT TYPES
+// ===============================
+export function collectTypes(ast) {
+  const registry = {};
+
+  for (const node of ast.children) {
+    if (node.type === 'type') {
+      registry[node.name] = node.decls;
+    }
+  }
+  return registry;
+}
+
+// ===============================
+// 5. SEMANTIC PASS 2 – RESOLVE RUNTIME
+// ===============================
+export function resolve(ast, registry) {
+  for (const node of ast.children) {
+    if (node.type !== 'type') {
+      node.schema = registry[node.type] || null;
+    }
+  }
+  return ast;
+}
+
+// ===============================
+// RUN PIPELINE
+// ===============================
+//import { lex, structure, declarative, collectTypes, resolve } from './';
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+
+function clone(o){
+    let s = JSON.stringify(o)
+    return JSON.parse(s)
+}
+
+function run() {
+  const t1 = lex(input.value);  const t1c = clone(t1)
+  const t2 = structure(t1c);    const t2c = clone(t2)
+  const t3 = declarative( (t2c) );          const t3c = clone(t3)
+  const registry = collectTypes( (t3c) );   const registryc = clone(registry)
+
+  const t4 = resolve(t3c, registryc);
+
+  output.textContent = JSON.stringify({ 
+    tokens:     t1, 
+    structure:  t2, 
+    declarative:  t3, 
+    ast:        t4, 
+    registry 
+    }, null, 2);
+}
+
+input.addEventListener('input', run);
+run();
+</script>
+
+</body>
+</html>
