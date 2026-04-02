@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WebAmp Live Skin Switch</title>
+</head>
+
+<body style="background:#555; padding:40px;">
+
+<button>Halaman luar (aman)</button>
+
+<wa-engine skin="classic"></wa-engine>
+
+<script>
+// #region Component
+/* =========================
+   SKIN REGISTRY
+========================= */
+const SKINS = {
+  classic: `
+    :host {
+      --wa-bg: linear-gradient(#3a3a3a, #1f1f1f);
+      --wa-border: #000;
+      --wa-button-bg: #2a2a2a;
+      --wa-button-active: #4caf50;
+      --wa-text: #e0e0e0;
+    }
+  `,
+  neon: `
+    :host {
+      --wa-bg: linear-gradient(#140028, #060012);
+      --wa-border: #ff00ff;
+      --wa-button-bg: #220044;
+      --wa-button-active: #00ffff;
+      --wa-text: #ffffff;
+    }
+  `
+};
+// #endregion
+/* =========================
+   WA-ENGINE
+========================= */
+class WaEngine extends HTMLElement {
+  constructor() {
+    super();
+    const s = this.attachShadow({ mode: 'open' });
+
+    s.innerHTML = `
+      <style id="skin"></style>
+      <div id="ui">
+        <wa-main-window></wa-main-window>
+        <wa-eq-window hidden></wa-eq-window>
+      </div>
+    `;
+
+    this.addEventListener('wa-set-skin', e => {
+      this.applySkin(e.detail);
+    });
+
+    this.addEventListener('wa-toggle-eq', () => {
+      this.shadowRoot.querySelector('wa-eq-window').toggle();
+    });
+  }
+
+  connectedCallback() {
+    this.applySkin(this.getAttribute('skin') || 'classic');
+  }
+
+  applySkin(name) {
+    this.shadowRoot.getElementById('skin').textContent =
+      SKINS[name] || '';
+  }
+}
+customElements.define('wa-engine', WaEngine);
+
+/* =========================
+   BASE WINDOW
+========================= */
+class WaWindowBase extends HTMLElement {
+  constructor(title) {
+    super();
+    const s = this.attachShadow({ mode: 'open' });
+
+    s.innerHTML = `
+      <style>
+        :host {
+          position: absolute;
+          font-family: Tahoma, Arial, sans-serif;
+          color: var(--wa-text);
+        }
+        .window {
+          background: var(--wa-bg);
+          border: 2px solid var(--wa-border);
+          width: 240px;
+        }
+        .titlebar {
+          background: #000;
+          padding: 6px;
+          font-weight: bold;
+        }
+        .content {
+          padding: 8px;
+        }
+        button {
+          background: var(--wa-button-bg);
+          border: 1px solid var(--wa-border);
+          color: var(--wa-text);
+          margin-right: 4px;
+        }
+        button:active {
+          background: var(--wa-button-active);
+        }
+      </style>
+
+      <div class="window">
+        <div class="titlebar">${title}</div>
+        <div class="content"><slot></slot></div>
+      </div>
+    `;
+  }
+}
+
+/* =========================
+   MAIN WINDOW
+========================= */
+class WaMainWindow extends WaWindowBase {
+  constructor() {
+    super('WEBAMP');
+    this.style.left = '40px';
+    this.style.top = '40px';
+
+    this.shadowRoot.querySelector('.content').innerHTML = `
+      <div>
+        <button id="classic">Classic</button>
+        <button id="neon">Neon</button>
+      </div>
+      <div style="margin-top:6px">
+        <button id="eq">EQ</button>
+      </div>
+    `;
+  }
+
+  connectedCallback() {
+    this.shadowRoot.getElementById('classic').onclick = () =>
+      this.emitSkin('classic');
+
+    this.shadowRoot.getElementById('neon').onclick = () =>
+      this.emitSkin('neon');
+
+    this.shadowRoot.getElementById('eq').onclick = () =>
+      this.dispatchEvent(new CustomEvent('wa-toggle-eq', {
+        bubbles: true,
+        composed: true
+      }));
+  }
+
+  emitSkin(name) {
+    this.dispatchEvent(new CustomEvent('wa-set-skin', {
+      detail: name,
+      bubbles: true,
+      composed: true
+    }));
+  }
+}
+customElements.define('wa-main-window', WaMainWindow);
+
+/* =========================
+   EQ WINDOW
+========================= */
+class WaEqWindow extends WaWindowBase {
+  constructor() {
+    super('EQUALIZER');
+    this.style.left = '300px';
+    this.style.top = '60px';
+  }
+
+  toggle() {
+    this.hidden = !this.hidden;
+  }
+}
+customElements.define('wa-eq-window', WaEqWindow);
+</script>
+
+</body>
+</html>
